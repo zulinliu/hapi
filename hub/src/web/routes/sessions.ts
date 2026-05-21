@@ -1,49 +1,23 @@
-import { getPermissionModesForFlavor, isPermissionModeAllowedForFlavor, supportsModelChange, toSessionSummary } from '@hapi/protocol'
+import {
+    DeleteUploadRequestSchema,
+    getPermissionModesForFlavor,
+    isPermissionModeAllowedForFlavor,
+    RenameSessionRequestSchema,
+    ResumeSessionRequestSchema,
+    SessionCollaborationModeRequestSchema,
+    SessionEffortRequestSchema,
+    SessionModelReasoningEffortRequestSchema,
+    SessionModelRequestSchema,
+    SessionPermissionModeRequestSchema,
+    supportsModelChange,
+    toSessionSummary,
+    UploadFileRequestSchema
+} from '@hapi/protocol'
 import type { SlashCommand } from '@hapi/protocol/apiTypes'
-import { CodexCollaborationModeSchema, PermissionModeSchema } from '@hapi/protocol/schemas'
 import { Hono } from 'hono'
-import { z } from 'zod'
 import type { SyncEngine, Session } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
-
-const permissionModeSchema = z.object({
-    mode: PermissionModeSchema
-})
-
-const resumeBodySchema = z.object({
-    permissionMode: PermissionModeSchema.optional()
-})
-
-const collaborationModeSchema = z.object({
-    mode: CodexCollaborationModeSchema
-})
-
-const modelSchema = z.object({
-    model: z.string().trim().min(1).nullable()
-})
-
-const modelReasoningEffortSchema = z.object({
-    modelReasoningEffort: z.string().trim().min(1).nullable()
-})
-
-const effortSchema = z.object({
-    effort: z.string().trim().min(1).nullable()
-})
-
-const renameSessionSchema = z.object({
-    name: z.string().min(1).max(255)
-})
-
-const uploadSchema = z.object({
-    filename: z.string().min(1).max(255),
-    content: z.string().min(1),
-    mimeType: z.string().min(1).max(255)
-})
-
-const uploadDeleteSchema = z.object({
-    path: z.string().min(1)
-})
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -136,7 +110,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = body ? resumeBodySchema.safeParse(body) : { success: true as const, data: {} }
+        const parsed = body ? ResumeSessionRequestSchema.safeParse(body) : { success: true as const, data: {} }
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -178,7 +152,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = uploadSchema.safeParse(body)
+        const parsed = UploadFileRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -216,7 +190,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = uploadDeleteSchema.safeParse(body)
+        const parsed = DeleteUploadRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -289,7 +263,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = permissionModeSchema.safeParse(body)
+        const parsed = SessionPermissionModeRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -335,7 +309,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = collaborationModeSchema.safeParse(body)
+        const parsed = SessionCollaborationModeRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -361,7 +335,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = modelSchema.safeParse(body)
+        const parsed = SessionModelRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -403,7 +377,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = modelReasoningEffortSchema.safeParse(body)
+        const parsed = SessionModelReasoningEffortRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -431,7 +405,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = effortSchema.safeParse(body)
+        const parsed = SessionEffortRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -462,7 +436,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = renameSessionSchema.safeParse(body)
+        const parsed = RenameSessionRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body: name is required' }, 400)
         }

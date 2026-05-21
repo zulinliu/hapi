@@ -1,24 +1,12 @@
-import { AgentFlavorSchema } from '@hapi/protocol'
+import {
+    MachineListDirectoryRequestSchema,
+    MachinePathsExistsRequestSchema,
+    SpawnSessionRequestSchema
+} from '@hapi/protocol'
 import { Hono } from 'hono'
-import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireMachine } from './guards'
-
-const spawnBodySchema = z.object({
-    directory: z.string().min(1),
-    agent: AgentFlavorSchema.optional(),
-    model: z.string().optional(),
-    effort: z.string().optional(),
-    modelReasoningEffort: z.string().optional(),
-    yolo: z.boolean().optional(),
-    sessionType: z.enum(['simple', 'worktree']).optional(),
-    worktreeName: z.string().optional()
-})
-
-const pathsExistsSchema = z.object({
-    paths: z.array(z.string().min(1)).max(1000)
-})
 
 export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -47,7 +35,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = spawnBodySchema.safeParse(body)
+        const parsed = SpawnSessionRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -80,7 +68,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = z.object({ path: z.string().min(1) }).safeParse(body)
+        const parsed = MachineListDirectoryRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -106,7 +94,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = pathsExistsSchema.safeParse(body)
+        const parsed = MachinePathsExistsRequestSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }

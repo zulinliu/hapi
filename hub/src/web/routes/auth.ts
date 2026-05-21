@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { SignJWT } from 'jose'
-import { z } from 'zod'
+import { AuthRequestSchema } from '@hapi/protocol'
 import { getConfiguration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
@@ -9,22 +9,12 @@ import { getOrCreateOwnerId } from '../../config/ownerId'
 import type { WebAppEnv } from '../middleware/auth'
 import type { Store } from '../../store'
 
-const telegramAuthSchema = z.object({
-    initData: z.string()
-})
-
-const accessTokenAuthSchema = z.object({
-    accessToken: z.string()
-})
-
-const authBodySchema = z.union([telegramAuthSchema, accessTokenAuthSchema])
-
 export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.post('/auth', async (c) => {
         const json = await c.req.json().catch(() => null)
-        const parsed = authBodySchema.safeParse(json)
+        const parsed = AuthRequestSchema.safeParse(json)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }

@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import {
+    AttachmentMetadataSchema,
+    CodexCollaborationModeSchema,
     DecryptedMessageSchema,
     MachineSchema,
+    PermissionModeSchema,
     SessionSchema
 } from './schemas'
+import { AgentFlavorSchema } from './modes'
 import type {
     DecryptedMessage,
     Machine,
@@ -84,6 +88,123 @@ export type MachinesResponse = { machines: Machine[] }
 export type SpawnResponse =
     | { type: 'success'; sessionId: string }
     | { type: 'error'; message: string }
+
+export const SessionPermissionModeRequestSchema = z.object({
+    mode: PermissionModeSchema
+})
+
+export type SessionPermissionModeRequest = z.infer<typeof SessionPermissionModeRequestSchema>
+
+export const ResumeSessionRequestSchema = z.object({
+    permissionMode: PermissionModeSchema.optional()
+})
+
+export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequestSchema>
+
+export const SessionCollaborationModeRequestSchema = z.object({
+    mode: CodexCollaborationModeSchema
+})
+
+export type SessionCollaborationModeRequest = z.infer<typeof SessionCollaborationModeRequestSchema>
+
+export const SessionModelRequestSchema = z.object({
+    model: z.string().trim().min(1).nullable()
+})
+
+export type SessionModelRequest = z.infer<typeof SessionModelRequestSchema>
+
+export const SessionModelReasoningEffortRequestSchema = z.object({
+    modelReasoningEffort: z.string().trim().min(1).nullable()
+})
+
+export type SessionModelReasoningEffortRequest = z.infer<typeof SessionModelReasoningEffortRequestSchema>
+
+export const SessionEffortRequestSchema = z.object({
+    effort: z.string().trim().min(1).nullable()
+})
+
+export type SessionEffortRequest = z.infer<typeof SessionEffortRequestSchema>
+
+export const RenameSessionRequestSchema = z.object({
+    name: z.string().min(1).max(255)
+})
+
+export type RenameSessionRequest = z.infer<typeof RenameSessionRequestSchema>
+
+export const UploadFileRequestSchema = z.object({
+    filename: z.string().min(1).max(255),
+    content: z.string().min(1),
+    mimeType: z.string().min(1).max(255)
+})
+
+export type UploadFileRequest = z.infer<typeof UploadFileRequestSchema>
+
+export const DeleteUploadRequestSchema = z.object({
+    path: z.string().min(1)
+})
+
+export type DeleteUploadRequest = z.infer<typeof DeleteUploadRequestSchema>
+
+export const MessagesQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+    beforeSeq: z.coerce.number().int().min(1).optional(),
+    beforeAt: z.coerce.number().int().min(0).optional(),
+}).refine((data) => (data.beforeAt === undefined) === (data.beforeSeq === undefined), {
+    message: 'beforeAt and beforeSeq must be provided together',
+    path: ['beforeAt'],
+})
+
+export type MessagesQuery = z.infer<typeof MessagesQuerySchema>
+
+export const SendMessageRequestSchema = z.object({
+    text: z.string(),
+    localId: z.string().min(1).optional(),
+    attachments: z.array(AttachmentMetadataSchema).optional(),
+    scheduledAt: z.number().int().positive().nullable().optional()
+}).refine(
+    (data) => data.scheduledAt == null || typeof data.localId === 'string',
+    { message: 'scheduledAt requires localId', path: ['localId'] }
+).refine(
+    (data) => data.scheduledAt == null || data.scheduledAt <= Date.now() + 7 * 24 * 60 * 60 * 1000,
+    { message: 'scheduledAt must be within 7 days from now', path: ['scheduledAt'] }
+).refine(
+    (data) => data.scheduledAt == null || !data.attachments?.length,
+    { message: 'scheduled messages with attachments are not supported', path: ['attachments'] }
+)
+
+export type SendMessageRequest = z.infer<typeof SendMessageRequestSchema>
+
+export const SpawnSessionRequestSchema = z.object({
+    directory: z.string().min(1),
+    agent: AgentFlavorSchema.optional(),
+    model: z.string().optional(),
+    effort: z.string().optional(),
+    modelReasoningEffort: z.string().optional(),
+    yolo: z.boolean().optional(),
+    sessionType: z.enum(['simple', 'worktree']).optional(),
+    worktreeName: z.string().optional()
+})
+
+export type SpawnSessionRequest = z.infer<typeof SpawnSessionRequestSchema>
+
+export const MachineListDirectoryRequestSchema = z.object({
+    path: z.string().min(1)
+})
+
+export type MachineListDirectoryRequest = z.infer<typeof MachineListDirectoryRequestSchema>
+
+export const MachinePathsExistsRequestSchema = z.object({
+    paths: z.array(z.string().min(1)).max(1000)
+})
+
+export type MachinePathsExistsRequest = z.infer<typeof MachinePathsExistsRequestSchema>
+
+export const AuthRequestSchema = z.union([
+    z.object({ initData: z.string() }),
+    z.object({ accessToken: z.string() })
+])
+
+export type AuthRequest = z.infer<typeof AuthRequestSchema>
 
 export type CommandResponse = {
     success: boolean
