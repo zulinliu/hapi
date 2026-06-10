@@ -320,6 +320,18 @@ export type OpencodeModelsResponse = {
 
 export type ListOpencodeModelsResponse = OpencodeModelsResponse
 
+export type OpencodeReasoningEffortOption = {
+    value: string
+    name?: string
+}
+
+export type OpencodeReasoningEffortResponse = {
+    success: boolean
+    options?: OpencodeReasoningEffortOption[]
+    currentValue?: string | null
+    error?: string
+}
+
 export type CursorModelSummary = OpencodeModelSummary
 
 export type CursorModelsResponse = OpencodeModelsResponse
