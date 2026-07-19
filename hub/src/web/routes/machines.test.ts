@@ -26,6 +26,79 @@ function createMachine(overrides?: Partial<Machine>): Machine {
 }
 
 describe('machines routes', () => {
+    it('validates and forwards machine-scoped host operations', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            startHostOperation: async (_machineId: string, request: unknown) => {
+                calls.push(request)
+                return {
+                    success: true,
+                    operation: {
+                        id: '11111111-1111-4111-8111-111111111111',
+                        domain: 'file',
+                        kind: 'create-directory',
+                        status: 'queued',
+                        progress: 0,
+                        createdAt: 1
+                    }
+                }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/host/operations', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ domain: 'file', operation: { kind: 'create-directory', path: '/workspace/new' } })
+        })
+
+        expect(response.status).toBe(200)
+        expect(calls).toEqual([{ domain: 'file', operation: { kind: 'create-directory', path: '/workspace/new' } }])
+    })
+
+    it('forwards scoped file previews and editor writes', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            readHostFilePreview: async (_machineId: string, path: string) => {
+                calls.push(['read', { path }])
+                return { success: true, kind: 'text', text: 'hello', size: 5, modified: 1 }
+            },
+            writeHostFile: async (_machineId: string, request: unknown) => {
+                calls.push(['write', request])
+                return { success: true, kind: 'text', text: 'updated', size: 7, modified: 2 }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const preview = await app.request('/api/machines/machine-1/host/files/read', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: '/workspace/notes.md' })
+        })
+        const write = await app.request('/api/machines/machine-1/host/files/write', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: '/workspace/notes.md', content: 'updated', expectedModified: 1, expectedSize: 5 })
+        })
+
+        expect(preview.status).toBe(200)
+        expect(write.status).toBe(200)
+        expect(calls).toEqual([
+            ['read', { path: '/workspace/notes.md' }],
+            ['write', { path: '/workspace/notes.md', content: 'updated', expectedModified: 1, expectedSize: 5 }]
+        ])
+    })
+
     it('forwards Grok Auto permission mode when spawning', async () => {
         const machine = createMachine()
         let capturedPermissionMode: string | undefined

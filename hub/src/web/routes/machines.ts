@@ -1,4 +1,11 @@
 import {
+    GitInspectRequestSchema,
+    HostListDirectoryRequestSchema,
+    HostFilePreviewRequestSchema,
+    HostFileWriteRequestSchema,
+    HostDownloadChunkRequestSchema,
+    HostDownloadPrepareRequestSchema,
+    HostOperationRequestSchema,
     MachineListDirectoryRequestSchema,
     MachinePathsExistsRequestSchema,
     SpawnSessionRequestSchema
@@ -80,6 +87,117 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : 'Failed to list directory' }, 500)
         }
+    })
+
+    app.post('/machines/:id/host/files/list', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostListDirectoryRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.listHostDirectory(machineId, parsed.data.path, parsed.data.includeHidden))
+    })
+
+    app.post('/machines/:id/host/files/read', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostFilePreviewRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.readHostFilePreview(machineId, parsed.data.path))
+    })
+
+    app.post('/machines/:id/host/files/write', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostFileWriteRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.writeHostFile(machineId, parsed.data))
+    })
+
+    app.post('/machines/:id/host/downloads', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostDownloadPrepareRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.prepareHostDownload(machineId, parsed.data.path))
+    })
+
+    app.post('/machines/:id/host/downloads/:downloadId/chunk', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const body = await c.req.json().catch(() => null)
+        const parsed = HostDownloadChunkRequestSchema.safeParse({
+            ...(body && typeof body === 'object' ? body : {}),
+            id: c.req.param('downloadId')
+        })
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.readHostDownloadChunk(machineId, parsed.data.id, parsed.data.offset))
+    })
+
+    app.post('/machines/:id/host/downloads/:downloadId/release', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostDownloadChunkRequestSchema.pick({ id: true }).safeParse({ id: c.req.param('downloadId') })
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        await engine.releaseHostDownload(machineId, parsed.data.id)
+        return c.json({ success: true })
+    })
+
+    app.post('/machines/:id/host/git/inspect', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = GitInspectRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.inspectHostGit(machineId, parsed.data.path))
+    })
+
+    app.post('/machines/:id/host/operations', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        const parsed = HostOperationRequestSchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        return c.json(await engine.startHostOperation(machineId, parsed.data))
+    })
+
+    app.get('/machines/:id/host/operations/:operationId', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        return c.json(await engine.getHostOperation(machineId, c.req.param('operationId')))
+    })
+
+    app.post('/machines/:id/host/operations/:operationId/cancel', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ error: 'Not connected' }, 503)
+        const machineId = c.req.param('id')
+        const machine = requireMachine(c, engine, machineId)
+        if (machine instanceof Response) return machine
+        return c.json(await engine.cancelHostOperation(machineId, c.req.param('operationId')))
     })
 
     app.post('/machines/:id/paths/exists', async (c) => {
