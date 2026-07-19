@@ -91,6 +91,47 @@ describe('FileManager', () => {
         await expect(manager.execute({ kind: 'delete', paths: [join(root, '.git')] }, context)).rejects.toThrow(/Git metadata/)
     })
 
+    for (const kind of ['copy', 'move', 'delete'] as const) {
+        it(`refuses to ${kind} a directory containing nested Git metadata`, async () => {
+            const { root, manager } = await createManager()
+            const repository = join(root, 'repository')
+            const gitConfig = join(repository, '.git', 'config')
+            await mkdir(join(repository, '.git'), { recursive: true })
+            await writeFile(gitConfig, '[core]')
+
+            if (kind === 'delete') {
+                await expect(manager.execute({ kind, paths: [repository] }, context)).rejects.toThrow(/Git metadata/)
+            } else {
+                const destination = join(root, 'destination')
+                await mkdir(destination)
+                await expect(manager.execute({ kind, sources: [repository], destination, conflict: 'fail' }, context)).rejects.toThrow(/Git metadata/)
+            }
+
+            expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+        })
+    }
+
+    it('refuses to replace a directory containing nested Git metadata', async () => {
+        const { root, manager } = await createManager()
+        const source = join(root, 'source')
+        const destination = join(root, 'destination')
+        const existing = join(destination, 'source')
+        const gitConfig = join(existing, '.git', 'config')
+        await mkdir(source)
+        await writeFile(join(source, 'file.txt'), 'source')
+        await mkdir(join(existing, '.git'), { recursive: true })
+        await writeFile(gitConfig, '[core]')
+
+        await expect(manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination,
+            conflict: 'replace'
+        }, context)).rejects.toThrow(/Git metadata/)
+
+        expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+    })
+
     it('preflights every conflict before copying any source', async () => {
         const { root, manager } = await createManager()
         const first = join(root, 'first.txt')

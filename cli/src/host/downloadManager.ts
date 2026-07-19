@@ -33,6 +33,12 @@ type ArchiveEntry =
     | { type: 'directory'; archivePath: string }
     | { type: 'file'; path: string; archivePath: string }
 
+function assertNotGitMetadataPath(path: string): void {
+    if (path.split(/[\\/]+/).some((segment) => segment.toLowerCase() === '.git')) {
+        throw new Error('Git metadata must be managed through Git operations')
+    }
+}
+
 async function collectArchiveEntries(path: string): Promise<{ bytes: number; files: number; entries: ArchiveEntry[] }> {
     let bytes = 0
     let files = 0
@@ -46,6 +52,7 @@ async function collectArchiveEntries(path: string): Promise<{ bytes: number; fil
         })
         const directoryEntries = await readdir(current, { withFileTypes: true })
         for (const entry of directoryEntries) {
+            if (entry.name.toLowerCase() === '.git') continue
             const child = join(current, entry.name)
             const info = await lstat(child)
             if (entry.isDirectory()) {
@@ -97,7 +104,9 @@ export class DownloadManager {
     constructor(private readonly scope: WorkspaceScope) {}
 
     async prepare(rawPath: string): Promise<HostDownloadDescriptor> {
+        assertNotGitMetadataPath(rawPath)
         const path = await this.scope.resolveReadable(rawPath)
+        assertNotGitMetadataPath(path)
         const info = await stat(path)
         const id = randomUUID()
         if (info.isFile()) {

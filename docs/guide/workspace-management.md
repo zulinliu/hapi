@@ -8,7 +8,7 @@ Start the runner with one or more workspace roots:
 
     hapi runner start --workspace-root ~/code --workspace-root /srv/projects
 
-Open **Browse** in the web app and select a machine. Every file and Git operation must resolve inside one of that machine's configured roots. Workspace roots and nested .git metadata cannot be modified through the file manager.
+Open **Browse** in the web app and select a machine. Every file and Git operation must resolve inside one of that machine's configured roots. Workspace roots and nested .git metadata cannot be modified through the file manager. Directory downloads exclude Git metadata.
 
 ## File controls
 
@@ -24,7 +24,7 @@ The **Files** tab supports:
 - uploading one file at a time to the current directory, up to 20 MiB;
 - downloading individual files and ZIP archives of directories.
 
-Copy and move operations preflight destinations before changing files. Uploads create a numbered copy when the destination name already exists, so they do not overwrite a host file by default. Long operations run as cancellable runner jobs and report progress in the web app. Directory archives preserve the selected root directory and empty directories.
+Copy and move operations preflight destinations before changing files. Uploads create a numbered copy when the destination name already exists, so they do not overwrite a host file by default. Long operations run as cancellable runner jobs and report progress in the web app. Directory archives preserve the selected root directory and empty directories while excluding Git metadata.
 
 ## Git controls
 

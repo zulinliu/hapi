@@ -24,6 +24,21 @@ async function pathExists(path: string): Promise<boolean> {
     }
 }
 
+async function assertNoGitMetadataTree(path: string): Promise<void> {
+    if (basename(path).toLowerCase() === '.git') {
+        throw new Error('Git metadata must be managed through Git operations')
+    }
+    const info = await lstat(path)
+    if (!info.isDirectory()) return
+
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+        if (entry.name.toLowerCase() === '.git') {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
+        if (entry.isDirectory()) await assertNoGitMetadataTree(join(path, entry.name))
+    }
+}
+
 function isDescendant(candidate: string, parent: string): boolean {
     const rel = relative(parent, candidate)
     return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
@@ -253,10 +268,12 @@ export class FileManager {
             case 'move':
                 return await this.copyOrMove(operation, context, true)
             case 'delete': {
+                const paths = await Promise.all(operation.paths.map(async (path) => await this.scope.resolveMutableExisting(path)))
+                await Promise.all(paths.map(async (path) => await assertNoGitMetadataTree(path)))
                 const deleted: string[] = []
-                for (let index = 0; index < operation.paths.length; index += 1) {
+                for (let index = 0; index < paths.length; index += 1) {
                     if (context.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
-                    const path = await this.scope.resolveMutableExisting(operation.paths[index])
+                    const path = paths[index]
                     context.report(index / operation.paths.length, `Deleting ${basename(path)}`)
                     await rm(path, { recursive: true, force: false })
                     deleted.push(path)
@@ -291,11 +308,17 @@ export class FileManager {
             }
             return { source, target, sourceInfo }
         }))
+        await Promise.all(plans.map(async (plan) => await assertNoGitMetadataTree(plan.source)))
         const duplicateTargets = plans.filter((plan, index) => plans.findIndex((candidate) => candidate.target === plan.target) !== index)
         if (duplicateTargets.length > 0) throw new Error(`Multiple sources have the same destination name: ${basename(duplicateTargets[0].target)}`)
         const conflicts = (await Promise.all(plans.map(async (plan) => await pathExists(plan.target) ? plan.target : null))).filter(
             (target): target is string => target !== null
         )
+        if (operation.conflict === 'replace') {
+            await Promise.all(conflicts.map(async (target) => {
+                await assertNoGitMetadataTree(await this.scope.resolveMutableExisting(target))
+            }))
+        }
         // Detect every collision before changing anything. A failed preflight
         // must never leave an earlier source copied while a later one failed.
         if (operation.conflict === 'fail' && conflicts.length > 0) {

@@ -33,6 +33,9 @@ describe('DownloadManager', () => {
         const folder = join(root, 'project')
         await mkdir(folder)
         await writeFile(join(folder, 'README.md'), 'archive me')
+        const gitDirectory = join(folder, '.git')
+        await mkdir(gitDirectory)
+        await writeFile(join(gitDirectory, 'config'), '[remote "origin"]')
         const manager = new DownloadManager(await WorkspaceScope.create([root]))
 
         const download = await manager.prepare(folder)
@@ -42,5 +45,7 @@ describe('DownloadManager', () => {
         expect(download).toMatchObject({ name: 'project.zip', mimeType: 'application/zip', archive: true })
         expect(archive.subarray(0, 4).toString('hex')).toBe('504b0304')
         expect(archive.includes(Buffer.from('project/README.md'))).toBe(true)
+        expect(archive.includes(Buffer.from('project/.git/config'))).toBe(false)
+        await expect(manager.prepare(gitDirectory)).rejects.toThrow(/Git metadata/)
     })
 })
