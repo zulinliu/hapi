@@ -90,6 +90,15 @@ describe('FileManager', () => {
         }, context)
         expect(await readFile(join(destination, 'source (copy).txt'), 'utf8')).toBe('source')
 
+        const replaced = await manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination,
+            conflict: 'replace'
+        }, context)
+        expect(replaced).toMatchObject({ paths: [join(destination, 'source.txt')], replaced: [join(destination, 'source.txt')] })
+        expect(await readFile(join(destination, 'source.txt'), 'utf8')).toBe('source')
+
         await manager.execute({
             kind: 'move',
             sources: [source],
@@ -107,6 +116,43 @@ describe('FileManager', () => {
             createDestination: true
         }, context)
         expect(await readFile(join(createdDestination, 'source.txt'), 'utf8')).toBe('source')
+    })
+
+    it('applies the selected conflict policy when copying into the source directory', async () => {
+        const { root, manager } = await createManager()
+        const source = join(root, 'source.txt')
+        await writeFile(source, 'source')
+
+        const copied = await manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination: root,
+            conflict: 'new-copy'
+        }, context)
+        expect(copied).toMatchObject({ paths: [join(root, 'source (copy).txt')], skipped: [] })
+        expect(await readFile(join(root, 'source (copy).txt'), 'utf8')).toBe('source')
+
+        const skipped = await manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination: root,
+            conflict: 'skip'
+        }, context)
+        expect(skipped).toMatchObject({ paths: [], skipped: [source] })
+
+        const replace = await manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination: root,
+            conflict: 'replace'
+        }, context)
+        expect(replace).toMatchObject({ paths: [], skipped: [source] })
+        await expect(manager.execute({
+            kind: 'copy',
+            sources: [source],
+            destination: root,
+            conflict: 'fail'
+        }, context)).rejects.toThrow(/already exists/)
     })
 
     it('reads previewable files and prevents stale editor writes', async () => {

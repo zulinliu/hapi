@@ -763,6 +763,8 @@ export default {
   'settings.providers.test': 'Test',
   'settings.providers.noModels': 'No cached models',
   'settings.providers.customModels': 'Custom models, one per line. Add [1M] to declare 1M context.',
+  'settings.providers.context1m': '1M context models',
+  'settings.providers.context1mHint': 'Selecting it adds a model[1M] option; the base model remains the 200K selection.',
   'settings.providers.protocol': 'API protocol',
   'settings.providers.nativeOnly': 'This agent currently uses its native login only.',
 
@@ -794,6 +796,7 @@ export default {
   'browse.deleteConfirm': 'Permanently delete {n} selected item(s)?',
   'browse.emptyDirectory': 'Empty directory',
   'browse.operation.completed': 'Operation completed',
+  'browse.operation.result': 'Operation complete: {completed} processed, {replaced} replaced, {skipped} skipped.',
   'browse.gitLoading': 'Loading Git…',
   'browse.gitClean': 'Working tree clean',
   'browse.stage': 'Stage',

@@ -37,8 +37,10 @@ describe('DownloadManager', () => {
 
         const download = await manager.prepare(folder)
         const chunk = await manager.readChunk(download.id, 0)
+        const archive = Buffer.from(chunk.base64!, 'base64')
 
-        expect(download).toMatchObject({ name: 'project.tar.gz', archive: true })
-        expect(Buffer.from(chunk.base64!, 'base64').subarray(0, 2).toString('hex')).toBe('1f8b')
+        expect(download).toMatchObject({ name: 'project.zip', mimeType: 'application/zip', archive: true })
+        expect(archive.subarray(0, 4).toString('hex')).toBe('504b0304')
+        expect(archive.includes(Buffer.from('project/README.md'))).toBe(true)
     })
 })

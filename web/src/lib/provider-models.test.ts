@@ -31,12 +31,13 @@ describe('provider model options', () => {
         })?.id).toBe(profile.id)
     })
 
-    it('shows source and context capacity without changing the raw model id', () => {
+    it('shows a distinct 1M selection alongside the conservative base model', () => {
         expect(providerModelOptions(profile)).toEqual(expect.arrayContaining([
             expect.objectContaining({ value: 'gpt-5', label: 'gpt-5 (200K)', group: 'GLM proxy · Provider' }),
-            expect.objectContaining({ value: 'glm-5.2', label: 'glm-5.2 (1M)', group: 'GLM proxy · Custom' })
+            expect.objectContaining({ value: 'glm-5.2', label: 'glm-5.2 (200K)', group: 'GLM proxy · Custom' }),
+            expect.objectContaining({ value: 'glm-5.2[1M]', label: 'glm-5.2[1M]', group: 'GLM proxy · Custom' })
         ]))
-        expect(mergeModelOptions([{ value: 'auto', label: 'Default', group: 'Native' }], profile, 'glm-5.2'))
-            .toEqual(expect.arrayContaining([expect.objectContaining({ value: 'glm-5.2' })]))
+        expect(mergeModelOptions([{ value: 'auto', label: 'Default', group: 'Native' }], profile, 'glm-5.2[1M]'))
+            .toEqual(expect.arrayContaining([expect.objectContaining({ value: 'glm-5.2[1M]' })]))
     })
 })

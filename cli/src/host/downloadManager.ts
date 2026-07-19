@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { execFile } from 'node:child_process'
-import { mkdtemp, open, readdir, rm, stat } from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
+import { mkdtemp, open, readdir, rm, lstat, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, extname, join } from 'node:path'
-import { promisify } from 'node:util'
+import { basename, extname, join, relative } from 'node:path'
+import { finished } from 'node:stream/promises'
+import { ZipFile } from 'yazl'
 import type { HostDownloadChunkResponse, HostDownloadDescriptor } from '@hapi/protocol'
 import { WorkspaceScope } from './workspaceScope'
 
-const execFileAsync = promisify(execFile)
 const CHUNK_BYTES = 256 * 1024
 const MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
 const MAX_ARCHIVE_FILES = 20_000
@@ -20,7 +20,7 @@ type PreparedDownload = HostDownloadDescriptor & {
 }
 
 function mimeType(path: string): string {
-    if (path.endsWith('.tar.gz')) return 'application/gzip'
+    if (path.endsWith('.zip')) return 'application/zip'
     const extension = extname(path).toLowerCase()
     if (extension === '.json') return 'application/json'
     if (extension === '.md' || extension === '.txt') return 'text/plain'
@@ -29,14 +29,25 @@ function mimeType(path: string): string {
     return 'application/octet-stream'
 }
 
-async function directorySize(path: string): Promise<{ bytes: number; files: number }> {
+type ArchiveEntry =
+    | { type: 'directory'; archivePath: string }
+    | { type: 'file'; path: string; archivePath: string }
+
+async function collectArchiveEntries(path: string): Promise<{ bytes: number; files: number; entries: ArchiveEntry[] }> {
     let bytes = 0
     let files = 0
+    const rootName = basename(path)
+    const entries: ArchiveEntry[] = []
     const visit = async (current: string): Promise<void> => {
-        const entries = await readdir(current, { withFileTypes: true })
-        for (const entry of entries) {
+        const relativePath = relative(path, current).replace(/\\/g, '/')
+        entries.push({
+            type: 'directory',
+            archivePath: relativePath ? `${rootName}/${relativePath}` : rootName
+        })
+        const directoryEntries = await readdir(current, { withFileTypes: true })
+        for (const entry of directoryEntries) {
             const child = join(current, entry.name)
-            const info = await stat(child)
+            const info = await lstat(child)
             if (entry.isDirectory()) {
                 await visit(child)
                 continue
@@ -46,10 +57,37 @@ async function directorySize(path: string): Promise<{ bytes: number; files: numb
             bytes += info.size
             if (files > MAX_ARCHIVE_FILES) throw new Error(`Directory contains more than ${MAX_ARCHIVE_FILES} files`)
             if (bytes > MAX_DOWNLOAD_BYTES) throw new Error(`Download exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
+            entries.push({
+                type: 'file',
+                path: child,
+                archivePath: `${rootName}/${relative(path, child).replace(/\\/g, '/')}`
+            })
         }
     }
     await visit(path)
-    return { bytes, files }
+    return { bytes, files, entries }
+}
+
+async function writeZipArchive(entries: ArchiveEntry[], archivePath: string): Promise<void> {
+    const zip = new ZipFile()
+    const output = createWriteStream(archivePath, { flags: 'wx', mode: 0o600 })
+    const archiveError = new Promise<never>((_resolve, reject) => {
+        zip.once('error', (error) => {
+            output.destroy(error)
+            reject(error)
+        })
+    })
+
+    for (const entry of entries) {
+        if (entry.type === 'directory') {
+            zip.addEmptyDirectory(entry.archivePath)
+        } else {
+            zip.addFile(entry.path, entry.archivePath)
+        }
+    }
+    zip.outputStream.pipe(output)
+    zip.end()
+    await Promise.race([finished(output), archiveError])
 }
 
 export class DownloadManager {
@@ -70,13 +108,10 @@ export class DownloadManager {
         if (this.archiving) throw new Error('Another directory archive is already being prepared')
         this.archiving = true
         try {
-            await directorySize(path)
+            const { entries } = await collectArchiveEntries(path)
             const tempDirectory = await mkdtemp(join(tmpdir(), 'hapi-download-'))
-            const archivePath = join(tempDirectory, `${basename(path)}.tar.gz`)
-            await execFileAsync('tar', ['-czf', archivePath, '-C', dirname(path), basename(path)], {
-                timeout: 5 * 60_000,
-                maxBuffer: 1024 * 1024
-            })
+            const archivePath = join(tempDirectory, `${basename(path)}.zip`)
+            await writeZipArchive(entries, archivePath)
             const archiveInfo = await stat(archivePath)
             if (archiveInfo.size > MAX_DOWNLOAD_BYTES) {
                 await rm(tempDirectory, { recursive: true, force: true })
@@ -84,8 +119,8 @@ export class DownloadManager {
             }
             return this.register({
                 id,
-                name: `${basename(path)}.tar.gz`,
-                mimeType: 'application/gzip',
+                name: `${basename(path)}.zip`,
+                mimeType: 'application/zip',
                 size: archiveInfo.size,
                 archive: true
             }, archivePath, tempDirectory)

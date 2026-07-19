@@ -767,6 +767,8 @@ export default {
   'settings.providers.test': '检测',
   'settings.providers.noModels': '没有已缓存模型',
   'settings.providers.customModels': '自定义模型，每行一个。添加 [1M] 声明 1M 上下文。',
+  'settings.providers.context1m': '1M 上下文模型',
+  'settings.providers.context1mHint': '勾选后新增“模型名[1M]”选项；基础模型仍按 200K 使用。',
   'settings.providers.protocol': 'API 协议',
   'settings.providers.nativeOnly': '此 Agent 当前仅使用原生登录。',
 
@@ -798,6 +800,7 @@ export default {
   'browse.deleteConfirm': '永久删除选中的 {n} 项？',
   'browse.emptyDirectory': '空文件夹',
   'browse.operation.completed': '操作已完成',
+  'browse.operation.result': '操作完成：已处理 {completed} 项，已覆盖 {replaced} 项，已跳过 {skipped} 项。',
   'browse.gitLoading': '正在加载 Git…',
   'browse.gitClean': '工作区干净',
   'browse.stage': '暂存',

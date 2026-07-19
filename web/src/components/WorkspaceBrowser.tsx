@@ -93,6 +93,11 @@ function operationDone(status: HostOperationSnapshot['status']): boolean {
     return status === 'succeeded' || status === 'failed' || status === 'cancelled'
 }
 
+function operationResultCount(result: HostOperationSnapshot['result'] | undefined, key: string): number {
+    const value = result?.[key]
+    return Array.isArray(value) ? value.length : 0
+}
+
 function changeStaged(change: GitFileChange): boolean {
     return change.indexStatus !== '.' && change.indexStatus !== '?'
 }
@@ -308,7 +313,15 @@ export function WorkspaceBrowser(props: {
                 setActiveOperation(operation)
             }
             if (operation.status !== 'succeeded') throw new Error(operation.error ?? operation.message ?? 'Operation did not complete')
-            setNotice(t('browse.operation.completed'))
+            if (operation.domain === 'file') {
+                setNotice(t('browse.operation.result', {
+                    completed: operationResultCount(operation.result, 'paths'),
+                    replaced: operationResultCount(operation.result, 'replaced'),
+                    skipped: operationResultCount(operation.result, 'skipped')
+                }))
+            } else {
+                setNotice(t('browse.operation.completed'))
+            }
             if (currentPath) await loadDirectory(currentPath)
             if (tab === 'git') await loadGit()
         } catch (operationError) {

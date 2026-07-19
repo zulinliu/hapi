@@ -229,7 +229,6 @@ export class FileManager {
         const plans = await Promise.all(operation.sources.map(async (rawSource) => {
             const source = await this.scope.resolveMutableExisting(rawSource)
             const target = await this.scope.resolveDestination(join(destinationDirectory, basename(source)))
-            if (source === target) throw new Error('Source and destination are the same')
             const sourceInfo = await lstat(source)
             if (sourceInfo.isDirectory() && isDescendant(target, source)) {
                 throw new Error('A directory cannot be copied or moved into itself')
@@ -248,17 +247,36 @@ export class FileManager {
         }
 
         const completed: string[] = []
+        const replaced: string[] = []
+        const skipped: string[] = []
         for (let index = 0; index < plans.length; index += 1) {
             if (context.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
             const { source } = plans[index]
             let target = plans[index].target
+
+            // A copy dialog defaults to the current directory. Treat its
+            // same-path "new copy" choice as a real duplicate instead of
+            // rejecting it before the selected conflict policy can apply.
+            // For replace/skip there is nothing safe to change at that path.
+            if (source === target) {
+                if (operation.conflict === 'new-copy') {
+                    target = await this.scope.resolveDestination(await nextCopyPath(destinationDirectory, basename(source)))
+                } else if (operation.conflict === 'replace' || operation.conflict === 'skip') {
+                    skipped.push(source)
+                    continue
+                }
+            }
             if (await pathExists(target)) {
-                if (operation.conflict === 'skip') continue
+                if (operation.conflict === 'skip') {
+                    skipped.push(target)
+                    continue
+                }
                 if (operation.conflict === 'new-copy') {
                     target = await this.scope.resolveDestination(await nextCopyPath(destinationDirectory, basename(source)))
                 } else if (operation.conflict === 'replace') {
                     const mutableTarget = await this.scope.resolveMutableExisting(target)
                     await rm(mutableTarget, { recursive: true, force: false })
+                    replaced.push(target)
                 }
             }
 
@@ -276,6 +294,6 @@ export class FileManager {
             }
             completed.push(target)
         }
-        return { paths: completed }
+        return { paths: completed, replaced, skipped }
     }
 }

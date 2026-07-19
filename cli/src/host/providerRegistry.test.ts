@@ -147,12 +147,12 @@ describe('ProviderRegistry', () => {
         })
 
         const listed = (await registry.list()).profiles?.[0]
-        expect(listed?.defaultModel).toBe('glm-5.2')
+        expect(listed?.defaultModel).toBe('glm-5.2[1M]')
         expect(listed?.models).toEqual(expect.arrayContaining([
             expect.objectContaining({ id: 'glm-5.2', contextWindow: 1_000_000, source: 'custom' }),
             expect.objectContaining({ id: 'gpt-5', contextWindow: 200_000, source: 'provider', refreshedAt: 123 })
         ]))
-        expect((await registry.resolve('codex', profile.id))?.defaultModel).toBe('glm-5.2')
+        expect((await registry.resolve('codex', profile.id))?.defaultModel).toBe('glm-5.2[1M]')
     })
 
     it('maps the selected protocol to launch-time credentials without exposing a model display tag', async () => {
@@ -171,6 +171,6 @@ describe('ProviderRegistry', () => {
 
         const launch = resolveProviderLaunch('grok', (await registry.resolve('grok', profile.id))!)
         expect(launch.env.XAI_API_KEY).toBe('xai-secret')
-        expect(launch.defaultModel).toBe('grok-4.1')
+        expect(launch.defaultModel).toBe('grok-4.1[1M]')
     })
 })

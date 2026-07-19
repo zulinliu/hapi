@@ -135,7 +135,7 @@ export class ProviderRegistry {
                 ...(parsedInput.baseUrl ? { baseUrl: parsedInput.baseUrl } : {}),
                 credentialType: parsedInput.credentialType,
                 apiKey: parsedInput.apiKey,
-                ...(parsedInput.defaultModel ? { defaultModel: parseProviderModelReference(parsedInput.defaultModel).id } : {}),
+                ...(parsedInput.defaultModel ? { defaultModel: formatProviderModelReference(parseProviderModelReference(parsedInput.defaultModel)) } : {}),
                 models: parsedInput.models.map((value) => ({
                     ...parseProviderModelReference(value),
                     source: 'custom' as const
@@ -203,7 +203,7 @@ export class ProviderRegistry {
             if (baseUrl === null) delete next.baseUrl
             else if (baseUrl !== undefined) next.baseUrl = baseUrl
             if (defaultModel === null) delete next.defaultModel
-            else if (defaultModel !== undefined) next.defaultModel = parseProviderModelReference(defaultModel).id
+            else if (defaultModel !== undefined) next.defaultModel = formatProviderModelReference(parseProviderModelReference(defaultModel))
             if (models !== undefined) {
                 const discovered = current.models.filter((model) => model.source === 'provider')
                 next.models = mergeModels(discovered, nextCustomModels)

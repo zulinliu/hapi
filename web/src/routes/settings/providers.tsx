@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import {
     AGENT_PROVIDER_CAPABILITIES,
     formatProviderModelReference,
+    parseProviderModelReference,
     type AgentProvider,
     type ProviderProfileInput,
     type ProviderProfileView,
@@ -72,6 +73,37 @@ function statusLabel(profile: ProviderProfileView, t: (key: string) => string): 
     return t(`settings.providers.connection.${profile.health.status}`)
 }
 
+function modelReferences(value: string): Array<{ id: string; contextWindow: number }> {
+    return value.split(/\r?\n|,/)
+        .map((reference) => reference.trim())
+        .filter(Boolean)
+        .flatMap((reference) => {
+            try {
+                return [parseProviderModelReference(reference)]
+            } catch {
+                return []
+            }
+        })
+}
+
+function updateContextModelReference(models: string, id: string, supportsOneMillion: boolean): string {
+    let found = false
+    const updated = models.split(/\r?\n|,/)
+        .map((reference) => reference.trim())
+        .filter(Boolean)
+        .map((reference) => {
+            try {
+                if (parseProviderModelReference(reference).id !== id) return reference
+                found = true
+                return supportsOneMillion ? `${id}[1M]` : id
+            } catch {
+                return reference
+            }
+        })
+    if (supportsOneMillion && !found) updated.push(`${id}[1M]`)
+    return updated.join('\n')
+}
+
 export default function SettingsProvidersPage() {
     const { api } = useAppContext()
     const { t } = useTranslation()
@@ -116,6 +148,18 @@ export default function SettingsProvidersPage() {
         () => editingId ? visibleProfiles.find((profile) => profile.id === editingId)?.models ?? [] : [],
         [editingId, visibleProfiles]
     )
+    const contextModelIds = useMemo(() => Array.from(new Set([
+        ...editableModels.map((model) => model.id),
+        ...modelReferences(form.models).map((model) => model.id)
+    ])).sort((left, right) => left.localeCompare(right)), [editableModels, form.models])
+    const oneMillionContextModelIds = useMemo(() => new Set(
+        modelReferences(form.models)
+            .filter((model) => model.contextWindow === 1_000_000)
+            .map((model) => model.id)
+    ), [form.models])
+    const defaultModelReferences = useMemo(() => Array.from(new Set(editableModels.flatMap((model) => (
+        model.contextWindow === 1_000_000 ? [model.id, formatProviderModelReference(model)] : [model.id]
+    )))), [editableModels])
 
     const resetForm = useCallback(() => {
         setEditingId(null)
@@ -252,8 +296,15 @@ export default function SettingsProvidersPage() {
                     <input required={!editingId} value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} placeholder={editingId ? t('settings.providers.secretUnchanged') : t('settings.providers.apiKey')} type="password" autoComplete="new-password" className="h-10 w-full rounded-lg border border-[var(--app-border)] bg-transparent px-3" />
                     {capability.credentialTypes.length > 1 ? <select value={form.credentialType} onChange={(event) => setForm({ ...form, credentialType: event.target.value as FormState['credentialType'] })} className="h-10 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-3"><option value="api-key">API key</option><option value="auth-token">Auth token</option></select> : null}
                     <input list="provider-models" value={form.defaultModel} onChange={(event) => setForm({ ...form, defaultModel: event.target.value })} placeholder={t('settings.providers.defaultModel')} className="h-10 w-full rounded-lg border border-[var(--app-border)] bg-transparent px-3" />
-                    <datalist id="provider-models">{editableModels.map((model) => <option key={model.id} value={formatProviderModelReference(model)} />)}</datalist>
+                    <datalist id="provider-models">{defaultModelReferences.map((model) => <option key={model} value={model} />)}</datalist>
                     <textarea value={form.models} onChange={(event) => setForm({ ...form, models: event.target.value })} placeholder={t('settings.providers.customModels')} rows={3} className="w-full rounded-lg border border-[var(--app-border)] bg-transparent px-3 py-2 text-sm" />
+                    {contextModelIds.length > 0 ? <fieldset className="space-y-2 rounded-lg border border-[var(--app-border)] p-3">
+                        <legend className="px-1 text-sm font-medium">{t('settings.providers.context1m')}</legend>
+                        <div className="text-xs text-[var(--app-hint)]">{t('settings.providers.context1mHint')}</div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                            {contextModelIds.map((modelId) => <label key={modelId} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={oneMillionContextModelIds.has(modelId)} onChange={(event) => setForm((current) => ({ ...current, models: updateContextModelReference(current.models, modelId, event.target.checked) }))} />{modelId}[1M]</label>)}
+                        </div>
+                    </fieldset> : null}
                     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />{t('settings.providers.enabled')}</label>
                     <div className="flex justify-end gap-2">
                         {editingId ? <button type="button" onClick={resetForm} className="rounded-lg px-3 py-2 text-sm text-[var(--app-hint)]">{t('common.cancel')}</button> : null}

@@ -1378,7 +1378,7 @@ function SessionChatInner(props: SessionChatProps) {
                         effort={props.session.effort}
                         agentFlavor={agentFlavor}
                         availableModelOptions={
-                            agentFlavor === 'codex'
+                            agentFlavor === 'claude' || agentFlavor === 'codex'
                                 ? managedProviderModelOptions
                                 : agentFlavor === 'cursor'
                                     ? (

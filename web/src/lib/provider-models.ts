@@ -20,12 +20,13 @@ export function activeProviderProfile(args: {
 }
 
 function contextLabel(model: Pick<ProviderModel, 'id' | 'contextWindow'>): string {
-    return model.contextWindow === 1_000_000 ? `${model.id} (1M)` : `${model.id} (200K)`
+    return model.contextWindow === 1_000_000 ? `${model.id}[1M]` : `${model.id} (200K)`
 }
 
 /**
- * Keeps the raw model id as the option value. `[1M]` is a configuration-time
- * declaration, not a model identifier accepted by Agent CLIs.
+ * A 1M declaration provides an additional virtual model option. The plain
+ * name remains the conservative 200K selection, while the `[1M]` selection
+ * is converted back to the provider's raw model id by the CLI transport.
  */
 export function providerModelOptions(profile: ProviderProfileView | null): GroupedModelOption[] {
     if (!profile) return []
@@ -33,9 +34,17 @@ export function providerModelOptions(profile: ProviderProfileView | null): Group
     const options: GroupedModelOption[] = []
     const seen = new Set<string>()
     const add = (model: ProviderModel, group: string) => {
-        if (seen.has(model.id)) return
-        seen.add(model.id)
-        options.push({ value: model.id, label: contextLabel(model), group })
+        if (!seen.has(model.id)) {
+            seen.add(model.id)
+            options.push({ value: model.id, label: `${model.id} (200K)`, group })
+        }
+        if (model.contextWindow === 1_000_000) {
+            const reference = `${model.id}[1M]`
+            if (!seen.has(reference)) {
+                seen.add(reference)
+                options.push({ value: reference, label: contextLabel(model), group })
+            }
+        }
     }
 
     for (const model of profile.models.filter((model) => model.source === 'provider')) {

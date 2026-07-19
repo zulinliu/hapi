@@ -20,7 +20,7 @@ The **Files** tab supports:
 - copying and moving files or folders;
 - permanently deleting selected files or folders after confirmation;
 - choosing an existing or custom destination for copy/move operations, with replace, new-copy, or skip conflict policies;
-- previewing and editing text files with stale-write protection, previewing images, and downloading files or compressed folder archives;
+- previewing and editing text files with stale-write protection, previewing images, downloading files, and downloading folder archives as ZIP files;
 - showing hidden files;
 - starting an agent session in the current directory.
 
@@ -57,7 +57,7 @@ A managed profile can contain:
 
 Profiles and secrets are stored only on the selected machine in `$HAPI_HOME/providers.json` with private file permissions. The hub does not persist provider secrets and list responses never return them.
 
-Use **Test** to call the protocol's low-cost model-list endpoint. A failed check never discards the form: the profile can still be saved as unverified. Provider models are cached on the machine and merged with HAPI's native model choices in new sessions and compatible running sessions. Append `[1M]` to a configured model ID, for example `glm-5.2[1M]`, to declare one-million-token context; the Agent receives the raw `glm-5.2` ID. Untagged models are shown as 200K by HAPI convention.
+Use **Test** to call the protocol's low-cost model-list endpoint. A failed check never discards the form: the profile can still be saved as unverified. Provider models are cached on the machine and merged with HAPI's native model choices in new sessions and compatible running sessions. In the profile editor, enable **1M context** for an individual model or append `[1M]` manually. For example, declaring `glm-5.2[1M]` creates two choices: `glm-5.2` (200K) and `glm-5.2[1M]` (1M). `[1M]` is a HAPI selection marker; the Agent receives the raw `glm-5.2` ID.
 
 Choose a machine default in Settings, or override it while creating a session. **Machine default** resolves the machine's configured profile and falls back to the Agent login when no default exists. **System / agent login** bypasses managed profiles and uses the Agent's existing login and environment. A running session can change only models that its Agent advertises; changing a provider applies on a new or restarted session.
 
