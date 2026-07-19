@@ -32,6 +32,7 @@ export const codexCommand: CommandDefinition = {
                 codexArgs?: string[]
                 permissionMode?: CodexPermissionMode
                 resumeSessionId?: string
+                existingSessionId?: string
                 model?: string
                 modelReasoningEffort?: ReasoningEffort
                 serviceTier?: string
@@ -57,6 +58,12 @@ export const codexCommand: CommandDefinition = {
                     const provider = commandArgs[++i]
                     if (!provider) throw new Error('Missing --hapi-provider value')
                     providerProfileId = provider === 'system' ? null : provider
+                } else if (arg === '--existing-session-id') {
+                    const sessionId = commandArgs[++i]
+                    if (!sessionId) {
+                        throw new Error('Missing --existing-session-id value')
+                    }
+                    options.existingSessionId = sessionId
                 } else if (arg === '--permission-mode') {
                     const mode = commandArgs[++i]
                     if (!mode || !(CODEX_PERMISSION_MODES as readonly string[]).includes(mode)) {
