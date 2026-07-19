@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DownloadManager } from './downloadManager'
@@ -25,6 +25,22 @@ describe('DownloadManager', () => {
         expect(download).toMatchObject({ name: 'notes.txt', archive: false })
         expect(Buffer.from(first.base64!, 'base64').toString('utf8')).toBe('chunked file content')
         expect(first.done).toBe(true)
+    })
+
+    it('fails when a prepared file shrinks before its next chunk', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'hapi-download-shrink-'))
+        created.push(root)
+        const file = join(root, 'notes.txt')
+        await writeFile(file, 'download content')
+        const manager = new DownloadManager(await WorkspaceScope.create([root]))
+
+        const download = await manager.prepare(file)
+        await truncate(file, 0)
+
+        await expect(manager.readChunk(download.id, 0)).resolves.toEqual({
+            success: false,
+            error: 'Download changed while being read'
+        })
     })
 
     it('archives a directory before serving it', async () => {

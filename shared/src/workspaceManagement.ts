@@ -50,9 +50,11 @@ export const HostFilePreviewResponseSchema = z.object({
 })
 export type HostFilePreviewResponse = z.infer<typeof HostFilePreviewResponseSchema>
 
+export const MAX_HOST_FILE_TEXT_BYTES = 2 * 1024 * 1024
+
 export const HostFileWriteRequestSchema = z.object({
     path: z.string().trim().min(1),
-    content: z.string().max(2 * 1024 * 1024),
+    content: z.string().max(MAX_HOST_FILE_TEXT_BYTES),
     expectedModified: z.number().int().nonnegative().optional(),
     expectedSize: z.number().int().nonnegative().optional()
 })
@@ -126,7 +128,7 @@ export const FileOperationSchema = z.discriminatedUnion('kind', [
     z.object({
         kind: z.literal('create-file'),
         path: z.string().trim().min(1),
-        content: z.string().optional()
+        content: z.string().max(MAX_HOST_FILE_TEXT_BYTES).optional()
     }),
     z.object({
         kind: z.literal('create-directory'),

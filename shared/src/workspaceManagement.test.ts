@@ -25,6 +25,14 @@ describe('workspace management schemas', () => {
         }).success).toBe(true)
     })
 
+    it('rejects create-file content above the text file limit', () => {
+        expect(FileOperationSchema.safeParse({
+            kind: 'create-file',
+            path: '/workspace/large.txt',
+            content: 'x'.repeat(2 * 1024 * 1024 + 1)
+        }).success).toBe(false)
+    })
+
     it('accepts bounded uploads to one directory and rejects path-like file names', () => {
         expect(HostFileUploadRequestSchema.safeParse({
             directory: '/workspace',

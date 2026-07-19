@@ -149,6 +149,9 @@ export class DownloadManager {
             const bytes = Math.min(CHUNK_BYTES, remaining)
             const buffer = Buffer.allocUnsafe(bytes)
             const { bytesRead } = await handle.read(buffer, 0, bytes, offset)
+            if (bytesRead === 0) {
+                return { success: false, error: 'Download changed while being read' }
+            }
             const nextOffset = offset + bytesRead
             return {
                 success: true,
