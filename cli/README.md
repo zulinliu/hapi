@@ -67,7 +67,8 @@ See `src/commands/auth.ts`.
 Both `start` and `start-sync` accept repeatable `--workspace-root <path>` (or `--workspace-root=<path>`). When set:
 
 - The web `/browse` page surfaces scoped file trees rooted at those paths.
-- The runner refuses `list-directory` and `spawn-session` requests for paths outside the configured roots.
+- The web `/browse` page can create, copy, move, and delete files and manage Git repositories.
+- The runner refuses file, Git, `list-directory`, and `spawn-session` requests for paths outside the configured roots.
 - `~` and `~/foo` are expanded.
 
 Omitting the flag keeps the legacy behavior: no scoping, no `/browse` feature.
@@ -122,8 +123,11 @@ See `src/configuration.ts` for all options.
 Data is stored in `~/.hapi/` (or `$HAPI_HOME`):
 
 - `settings.json` - User settings (machineId, token, onboarding flag). See `src/persistence.ts`.
+- `providers.json` - Namespace-partitioned Claude Code/Codex provider profiles and secrets (mode `0600`).
 - `runner.state.json` - Runner state (pid, port, version, heartbeat).
 - `logs/` - Log files.
+
+Managed provider defaults apply to new terminal and runner sessions. Use `--hapi-provider <uuid>` or `--hapi-provider system` to override a Claude Code/Codex launch.
 
 ## Requirements
 

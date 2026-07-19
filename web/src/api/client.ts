@@ -43,7 +43,25 @@ import type {
     ReopenSessionResponse,
     UploadFileResponse
 } from '@hapi/protocol/apiTypes'
-import type { AgentFlavor } from '@hapi/protocol'
+import type {
+    AgentFlavor,
+    AgentProvider,
+    GitInspectResponse,
+    HostListDirectoryResponse,
+    HostFilePreviewResponse,
+    HostFileWriteRequest,
+    HostFileWriteResponse,
+    HostDownloadChunkResponse,
+    HostDownloadPrepareResponse,
+    HostOperationGetResponse,
+    HostOperationRequest,
+    HostOperationStartResponse,
+    ProviderListResponse,
+    ProviderHealthCheckResponse,
+    ProviderMutationResponse,
+    ProviderProfileInput,
+    ProviderProfileUpdate
+} from '@hapi/protocol'
 import type { CancelMessageResponse } from '@hapi/protocol/schemas'
 
 type ApiClientOptions = {
@@ -594,6 +612,104 @@ export class ApiClient {
         )
     }
 
+    async listHostDirectory(machineId: string, path: string, includeHidden = false): Promise<HostListDirectoryResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/files/list`, {
+            method: 'POST',
+            body: JSON.stringify({ path, includeHidden })
+        })
+    }
+
+    async readHostFilePreview(machineId: string, path: string): Promise<HostFilePreviewResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/files/read`, {
+            method: 'POST',
+            body: JSON.stringify({ path })
+        })
+    }
+
+    async writeHostFile(machineId: string, request: HostFileWriteRequest): Promise<HostFileWriteResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/files/write`, {
+            method: 'POST',
+            body: JSON.stringify(request)
+        })
+    }
+
+    async prepareHostDownload(machineId: string, path: string): Promise<HostDownloadPrepareResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/downloads`, {
+            method: 'POST',
+            body: JSON.stringify({ path })
+        })
+    }
+
+    async readHostDownloadChunk(machineId: string, downloadId: string, offset: number): Promise<HostDownloadChunkResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/downloads/${encodeURIComponent(downloadId)}/chunk`, {
+            method: 'POST',
+            body: JSON.stringify({ offset })
+        })
+    }
+
+    async releaseHostDownload(machineId: string, downloadId: string): Promise<void> {
+        await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/downloads/${encodeURIComponent(downloadId)}/release`, {
+            method: 'POST'
+        })
+    }
+
+    async inspectHostGit(machineId: string, path: string): Promise<GitInspectResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/git/inspect`, {
+            method: 'POST',
+            body: JSON.stringify({ path })
+        })
+    }
+
+    async startHostOperation(machineId: string, request: HostOperationRequest): Promise<HostOperationStartResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/operations`, {
+            method: 'POST',
+            body: JSON.stringify(request)
+        })
+    }
+
+    async getHostOperation(machineId: string, operationId: string): Promise<HostOperationGetResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/operations/${encodeURIComponent(operationId)}`)
+    }
+
+    async cancelHostOperation(machineId: string, operationId: string): Promise<HostOperationGetResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/operations/${encodeURIComponent(operationId)}/cancel`, {
+            method: 'POST'
+        })
+    }
+
+    async listProviderProfiles(machineId: string, agent?: AgentProvider): Promise<ProviderListResponse> {
+        const query = agent ? `?agent=${encodeURIComponent(agent)}` : ''
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/providers${query}`)
+    }
+
+    async createProviderProfile(machineId: string, input: ProviderProfileInput): Promise<ProviderMutationResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/providers`, {
+            method: 'POST',
+            body: JSON.stringify(input)
+        })
+    }
+
+    async updateProviderProfile(machineId: string, id: string, patch: ProviderProfileUpdate): Promise<ProviderMutationResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/providers/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(patch)
+        })
+    }
+
+    async setDefaultProvider(machineId: string, agent: AgentProvider, id: string | null): Promise<ProviderMutationResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/providers/default`, {
+            method: 'POST',
+            body: JSON.stringify({ agent, id })
+        })
+    }
+
+    async checkProviderHealth(machineId: string, id: string, refreshModels = true): Promise<ProviderHealthCheckResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/providers/${encodeURIComponent(id)}/health`, {
+            method: 'POST',
+            body: JSON.stringify({ refreshModels })
+        })
+    }
+
     async checkMachinePathsExists(
         machineId: string,
         paths: string[]
@@ -617,7 +733,8 @@ export class ApiClient {
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         effort?: string,
-        permissionMode?: PermissionMode
+        permissionMode?: PermissionMode,
+        providerProfileId?: string | null
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
@@ -630,7 +747,8 @@ export class ApiClient {
                 sessionType,
                 worktreeName,
                 effort,
-                permissionMode
+                permissionMode,
+                providerProfileId
             })
         })
     }

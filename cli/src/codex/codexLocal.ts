@@ -10,6 +10,7 @@ import { codexSystemPrompt } from './utils/systemPrompt';
 import type { ReasoningEffort } from './appServerTypes';
 import { resolveCodexCommand } from './utils/codexExecutable';
 import type { McpServersConfig } from './utils/buildHapiMcpBridge';
+import { readCodexProviderConfigArgs } from './utils/providerConfigArgs';
 
 /**
  * Filter out 'resume' subcommand which is managed internally by hapi.
@@ -89,10 +90,11 @@ export async function codexLocal(opts: {
     }
 
     const codexCommand = resolveCodexCommand();
+    const providerConfigArgs = readCodexProviderConfigArgs();
 
     await spawnWithTerminalGuard({
         command: codexCommand.command,
-        args: [...codexCommand.args, ...args],
+        args: [...codexCommand.args, ...providerConfigArgs, ...args],
         cwd: opts.path,
         env: process.env,
         signal: opts.abort,

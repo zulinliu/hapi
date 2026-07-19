@@ -71,6 +71,36 @@ export type {
 
 export type { HapiSessionExport } from '@hapi/protocol/sessionExport'
 
+export type {
+    AgentProvider,
+    FileOperation,
+    GitCapabilities,
+    GitFileChange,
+    GitInspectResponse,
+    GitOperation,
+    HostFileEntry,
+    HostFilePreviewResponse,
+    HostFileWriteRequest,
+    HostFileWriteResponse,
+    HostDownloadChunkResponse,
+    HostDownloadDescriptor,
+    HostDownloadPrepareResponse,
+    HostListDirectoryResponse,
+    HostOperationGetResponse,
+    HostOperationRequest,
+    HostOperationSnapshot,
+    HostOperationStartResponse,
+    ProviderListResponse,
+    ProviderHealthCheckResponse,
+    ProviderProtocol,
+    ProviderModel,
+    ProviderMutationResponse,
+    ProviderProfileInput,
+    ProviderProfileUpdate,
+    ProviderProfileView,
+    RepositorySnapshot
+} from '@hapi/protocol'
+
 export type SessionMetadataSummary = {
     path: string
     host: string

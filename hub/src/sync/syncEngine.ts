@@ -807,7 +807,8 @@ export class SyncEngine {
         resumeSessionId?: string,
         effort?: string,
         permissionMode?: PermissionMode,
-        serviceTier?: string
+        serviceTier?: string,
+        providerProfileId?: string | null
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.rpcGateway.spawnSession(
             machineId,
@@ -821,8 +822,69 @@ export class SyncEngine {
             resumeSessionId,
             effort,
             permissionMode,
-            serviceTier
+            serviceTier,
+            providerProfileId
         )
+    }
+
+    async listHostDirectory(machineId: string, path: string, includeHidden: boolean) {
+        return await this.rpcGateway.listHostDirectory(machineId, path, includeHidden)
+    }
+
+    async readHostFilePreview(machineId: string, path: string) {
+        return await this.rpcGateway.readHostFilePreview(machineId, path)
+    }
+
+    async writeHostFile(machineId: string, request: import('@hapi/protocol').HostFileWriteRequest) {
+        return await this.rpcGateway.writeHostFile(machineId, request)
+    }
+
+    async prepareHostDownload(machineId: string, path: string) {
+        return await this.rpcGateway.prepareHostDownload(machineId, path)
+    }
+
+    async readHostDownloadChunk(machineId: string, id: string, offset: number) {
+        return await this.rpcGateway.readHostDownloadChunk(machineId, id, offset)
+    }
+
+    async releaseHostDownload(machineId: string, id: string) {
+        await this.rpcGateway.releaseHostDownload(machineId, id)
+    }
+
+    async inspectHostGit(machineId: string, path: string) {
+        return await this.rpcGateway.inspectHostGit(machineId, path)
+    }
+
+    async startHostOperation(machineId: string, request: import('@hapi/protocol').HostOperationRequest) {
+        return await this.rpcGateway.startHostOperation(machineId, request)
+    }
+
+    async getHostOperation(machineId: string, id: string) {
+        return await this.rpcGateway.getHostOperation(machineId, id)
+    }
+
+    async cancelHostOperation(machineId: string, id: string) {
+        return await this.rpcGateway.cancelHostOperation(machineId, id)
+    }
+
+    async listProviderProfiles(machineId: string, agent?: import('@hapi/protocol').AgentProvider) {
+        return await this.rpcGateway.listProviderProfiles(machineId, agent)
+    }
+
+    async createProviderProfile(machineId: string, input: import('@hapi/protocol').ProviderProfileInput) {
+        return await this.rpcGateway.createProviderProfile(machineId, input)
+    }
+
+    async updateProviderProfile(machineId: string, id: string, patch: import('@hapi/protocol').ProviderProfileUpdate) {
+        return await this.rpcGateway.updateProviderProfile(machineId, id, patch)
+    }
+
+    async setDefaultProvider(machineId: string, agent: import('@hapi/protocol').AgentProvider, id: string | null) {
+        return await this.rpcGateway.setDefaultProvider(machineId, agent, id)
+    }
+
+    async checkProviderHealth(machineId: string, id: string, refreshModels: boolean) {
+        return await this.rpcGateway.checkProviderHealth(machineId, id, refreshModels)
     }
 
     private resolveFlavor(session: Session): AgentFlavor {
@@ -885,6 +947,7 @@ export class SyncEngine {
                 thinking: session.thinking,
                 controlledByUser: session.agentState?.controlledByUser === true,
                 agentSessionId,
+                providerProfileId: metadata.providerProfileId,
                 model: session.model ?? null,
                 effort: session.effort ?? null,
                 modelReasoningEffort: session.modelReasoningEffort ?? null,
@@ -1289,7 +1352,8 @@ export class SyncEngine {
             resumeToken,
             session.effort ?? undefined,
             preferredPermissionMode,
-            session.serviceTier ?? undefined
+            session.serviceTier ?? undefined,
+            metadata.providerProfileId
         )
 
         if (spawnResult.type !== 'success') {

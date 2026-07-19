@@ -191,3 +191,17 @@ Canonical example: scratchlist toggle in `web/src/components/AssistantChat/Compo
 2. Unsure: read more code; if still stuck, ask w/ short options.
 3. Conflicts: call out; pick safer path.
 4. Unrecognized changes: assume other agent; keep going; focus your changes. If it causes issues, stop + ask user.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels without overrides. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context domain documentation layout. See `docs/agents/domain.md`.

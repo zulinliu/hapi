@@ -24,6 +24,24 @@ import type {
 } from '@hapi/protocol/apiTypes'
 import type { Server } from 'socket.io'
 import type { RpcRegistry } from '../socket/rpcRegistry'
+import type {
+    AgentProvider,
+    GitInspectResponse,
+    HostListDirectoryResponse,
+    HostFilePreviewResponse,
+    HostFileWriteRequest,
+    HostFileWriteResponse,
+    HostDownloadChunkResponse,
+    HostDownloadPrepareResponse,
+    HostOperationGetResponse,
+    HostOperationRequest,
+    HostOperationStartResponse,
+    ProviderListResponse,
+    ProviderHealthCheckResponse,
+    ProviderMutationResponse,
+    ProviderProfileInput,
+    ProviderProfileUpdate
+} from '@hapi/protocol'
 
 const DEFAULT_RPC_TIMEOUT_MS = 30_000
 const MODEL_LIST_RPC_TIMEOUT_MS = 120_000
@@ -146,13 +164,14 @@ export class RpcGateway {
         resumeSessionId?: string,
         effort?: string,
         permissionMode?: PermissionMode,
-        serviceTier?: string
+        serviceTier?: string,
+        providerProfileId?: string | null
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         try {
             const result = await this.machineRpc(
                 machineId,
                 RPC_METHODS.SpawnHappySession,
-                { type: 'spawn-in-directory', directory, agent, model, modelReasoningEffort, yolo, sessionType, worktreeName, resumeSessionId, effort, permissionMode, serviceTier }
+                { type: 'spawn-in-directory', directory, agent, providerProfileId, model, modelReasoningEffort, yolo, sessionType, worktreeName, resumeSessionId, effort, permissionMode, serviceTier }
             )
             if (result && typeof result === 'object') {
                 const obj = result as Record<string, unknown>
@@ -211,6 +230,66 @@ export class RpcGateway {
             exists[key] = value === true
         }
         return exists
+    }
+
+    async listHostDirectory(machineId: string, path: string, includeHidden: boolean): Promise<HostListDirectoryResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostListDirectory, { path, includeHidden }) as HostListDirectoryResponse
+    }
+
+    async readHostFilePreview(machineId: string, path: string): Promise<HostFilePreviewResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostFilePreview, { path }) as HostFilePreviewResponse
+    }
+
+    async writeHostFile(machineId: string, request: HostFileWriteRequest): Promise<HostFileWriteResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostFileWrite, request) as HostFileWriteResponse
+    }
+
+    async prepareHostDownload(machineId: string, path: string): Promise<HostDownloadPrepareResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostDownloadPrepare, { path }, 5 * 60_000) as HostDownloadPrepareResponse
+    }
+
+    async readHostDownloadChunk(machineId: string, id: string, offset: number): Promise<HostDownloadChunkResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostDownloadReadChunk, { id, offset }, 60_000) as HostDownloadChunkResponse
+    }
+
+    async releaseHostDownload(machineId: string, id: string): Promise<void> {
+        await this.machineRpc(machineId, RPC_METHODS.HostDownloadRelease, { id })
+    }
+
+    async inspectHostGit(machineId: string, path: string): Promise<GitInspectResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostGitInspect, { path }) as GitInspectResponse
+    }
+
+    async startHostOperation(machineId: string, request: HostOperationRequest): Promise<HostOperationStartResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostOperationStart, request) as HostOperationStartResponse
+    }
+
+    async getHostOperation(machineId: string, id: string): Promise<HostOperationGetResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostOperationGet, { id }) as HostOperationGetResponse
+    }
+
+    async cancelHostOperation(machineId: string, id: string): Promise<HostOperationGetResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.HostOperationCancel, { id }) as HostOperationGetResponse
+    }
+
+    async listProviderProfiles(machineId: string, agent?: AgentProvider): Promise<ProviderListResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.ProviderList, { agent }) as ProviderListResponse
+    }
+
+    async createProviderProfile(machineId: string, input: ProviderProfileInput): Promise<ProviderMutationResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.ProviderCreate, input) as ProviderMutationResponse
+    }
+
+    async updateProviderProfile(machineId: string, id: string, patch: ProviderProfileUpdate): Promise<ProviderMutationResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.ProviderUpdate, { id, patch }) as ProviderMutationResponse
+    }
+
+    async setDefaultProvider(machineId: string, agent: AgentProvider, id: string | null): Promise<ProviderMutationResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.ProviderSetDefault, { agent, id }) as ProviderMutationResponse
+    }
+
+    async checkProviderHealth(machineId: string, id: string, refreshModels: boolean): Promise<ProviderHealthCheckResponse> {
+        return await this.machineRpc(machineId, RPC_METHODS.ProviderHealthCheck, { id, refreshModels }) as ProviderHealthCheckResponse
     }
 
     async getCursorChatStoreStatus(

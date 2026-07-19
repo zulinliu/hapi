@@ -7,6 +7,7 @@ export interface SpawnSessionOptions {
     resumeSessionId?: string
     approvedNewDirectoryCreation?: boolean
     agent?: AgentFlavor
+    providerProfileId?: string | null
     model?: string
     effort?: string
     modelReasoningEffort?: string

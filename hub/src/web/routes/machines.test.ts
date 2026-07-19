@@ -26,6 +26,203 @@ function createMachine(overrides?: Partial<Machine>): Machine {
 }
 
 describe('machines routes', () => {
+    it('forwards provider selection when spawning', async () => {
+        const machine = createMachine()
+        let capturedProvider: string | null | undefined
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            spawnSession: async (...args: unknown[]) => {
+                capturedProvider = args[12] as string | null | undefined
+                return { type: 'success' as const, sessionId: 'session-provider' }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/spawn', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                directory: '/tmp/project',
+                agent: 'codex',
+                providerProfileId: '11111111-1111-4111-8111-111111111111'
+            })
+        })
+
+        expect(response.status).toBe(200)
+        expect(capturedProvider).toBe('11111111-1111-4111-8111-111111111111')
+    })
+
+    it('validates and forwards machine-scoped host operations', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            startHostOperation: async (_machineId: string, request: unknown) => {
+                calls.push(request)
+                return {
+                    success: true,
+                    operation: {
+                        id: '11111111-1111-4111-8111-111111111111',
+                        domain: 'file',
+                        kind: 'create-directory',
+                        status: 'queued',
+                        progress: 0,
+                        createdAt: 1
+                    }
+                }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/host/operations', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ domain: 'file', operation: { kind: 'create-directory', path: '/workspace/new' } })
+        })
+
+        expect(response.status).toBe(200)
+        expect(calls).toEqual([{ domain: 'file', operation: { kind: 'create-directory', path: '/workspace/new' } }])
+    })
+
+    it('forwards scoped file previews and editor writes', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            readHostFilePreview: async (_machineId: string, path: string) => {
+                calls.push(['read', { path }])
+                return { success: true, kind: 'text', text: 'hello', size: 5, modified: 1 }
+            },
+            writeHostFile: async (_machineId: string, request: unknown) => {
+                calls.push(['write', request])
+                return { success: true, kind: 'text', text: 'updated', size: 7, modified: 2 }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const preview = await app.request('/api/machines/machine-1/host/files/read', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: '/workspace/notes.md' })
+        })
+        const write = await app.request('/api/machines/machine-1/host/files/write', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: '/workspace/notes.md', content: 'updated', expectedModified: 1, expectedSize: 5 })
+        })
+
+        expect(preview.status).toBe(200)
+        expect(write.status).toBe(200)
+        expect(calls).toEqual([
+            ['read', { path: '/workspace/notes.md' }],
+            ['write', { path: '/workspace/notes.md', content: 'updated', expectedModified: 1, expectedSize: 5 }]
+        ])
+    })
+
+    it('validates provider credentials before forwarding them to a machine', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            createProviderProfile: async (_machineId: string, input: unknown) => {
+                calls.push(input)
+                return { success: true }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const invalid = await app.request('/api/machines/machine-1/providers', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                name: 'Invalid Codex token',
+                agent: 'codex',
+                protocol: 'openai-responses',
+                credentialType: 'auth-token',
+                apiKey: 'secret'
+            })
+        })
+        const valid = await app.request('/api/machines/machine-1/providers', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                name: 'Codex proxy',
+                agent: 'codex',
+                protocol: 'openai-responses',
+                baseUrl: 'https://example.com/v1',
+                credentialType: 'api-key',
+                apiKey: 'secret'
+            })
+        })
+
+        expect(invalid.status).toBe(400)
+        expect(valid.status).toBe(200)
+        expect(calls).toHaveLength(1)
+        expect(calls[0]).toMatchObject({ name: 'Codex proxy', credentialType: 'api-key' })
+    })
+
+    it('forwards a provider health check without exposing its credential to the hub', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            checkProviderHealth: async (_machineId: string, id: string, refreshModels: boolean) => {
+                calls.push({ id, refreshModels })
+                return { success: true, status: 'healthy', checkedAt: 1, models: [] }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/providers/11111111-1111-4111-8111-111111111111/health', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ refreshModels: true })
+        })
+
+        expect(response.status).toBe(200)
+        expect(calls).toEqual([{ id: '11111111-1111-4111-8111-111111111111', refreshModels: true }])
+    })
+
+    it('forwards only explicitly supplied provider update fields', async () => {
+        const machine = createMachine()
+        const calls: unknown[] = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            updateProviderProfile: async (_machineId: string, _id: string, patch: unknown) => {
+                calls.push(patch)
+                return { success: true }
+            }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => { c.set('namespace', 'default'); await next() })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/providers/11111111-1111-4111-8111-111111111111', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name: 'Renamed' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(calls).toEqual([{ name: 'Renamed' }])
+    })
+
     it('forwards Grok Auto permission mode when spawning', async () => {
         const machine = createMachine()
         let capturedPermissionMode: string | undefined

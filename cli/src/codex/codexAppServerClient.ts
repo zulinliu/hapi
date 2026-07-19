@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { logger } from '@/ui/logger';
+import { readCodexProviderConfigArgs } from './utils/providerConfigArgs';
+import { resolveCodexCommand } from './utils/codexExecutable';
 import { JsonLineParser } from '@/utils/jsonLineParser';
 import { killProcessByChildProcess } from '@/utils/process';
 import type {
@@ -93,14 +95,15 @@ export class CodexAppServerClient extends JsonLineParser {
             return;
         }
 
-        this.process = spawn('codex', ['app-server'], {
+        const codexCommand = resolveCodexCommand();
+        this.process = spawn(codexCommand.command, [...codexCommand.args, ...readCodexProviderConfigArgs(), 'app-server'], {
             env: Object.keys(process.env).reduce((acc, key) => {
                 const value = process.env[key];
                 if (typeof value === 'string') acc[key] = value;
                 return acc;
             }, {} as Record<string, string>),
             stdio: ['pipe', 'pipe', 'pipe'],
-            shell: process.platform === 'win32',
+            shell: false,
             windowsHide: process.platform === 'win32'
         });
 
