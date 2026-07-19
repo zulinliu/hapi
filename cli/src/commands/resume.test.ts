@@ -153,6 +153,25 @@ describe('resumeCommand', () => {
         })
     })
 
+    it('passes an explicit system provider selection to a local resume', async () => {
+        getLocalResumeTargetMock.mockResolvedValue({
+            sessionId: 'hapi-session-system',
+            flavor: 'claude',
+            directory: '/tmp/project',
+            machineId: 'machine-1',
+            active: false,
+            thinking: false,
+            controlledByUser: false,
+            agentSessionId: 'claude-session-1',
+            providerProfileId: null,
+            permissionMode: 'default'
+        })
+
+        await resumeCommand.run(createContext(['hapi-session-system']))
+
+        expect(applyProviderSelectionMock).toHaveBeenCalledWith('claude', null)
+    })
+
     it('resumes a Grok target in the native local TUI', async () => {
         getLocalResumeTargetMock.mockResolvedValue({
             sessionId: 'hapi-session-grok',

@@ -33,7 +33,6 @@ export async function applyProviderSelection(
 ): Promise<AgentLaunchConfiguration | null> {
     if (requestedId !== undefined) {
         clearProviderMetadata()
-        clearConflictingCredentials(agent)
         if (requestedId === null) {
             process.env.HAPI_PROVIDER_PROFILE_SYSTEM = '1'
             return null
