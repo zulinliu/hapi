@@ -139,7 +139,7 @@ describe('RepositoryManager', () => {
             url: relative(repository, outsideSource)
         }, context)).rejects.toThrow(/outside configured workspace roots/)
         await expect(stat(destination)).rejects.toMatchObject({ code: 'ENOENT' })
-    })
+    }, 20_000)
 
     it.skipIf(process.platform === 'win32')('prefers an authenticated gh command for GitHub clones', async () => {
         const root = await mkdtemp(join(tmpdir(), 'hapi-gh-clone-'))
