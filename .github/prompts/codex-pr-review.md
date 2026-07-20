@@ -13,11 +13,11 @@ HAPI is a local-first tool for running AI coding sessions (Claude Code/Codex/Gem
 
 **Monorepo structure:**
 - `cli/` - CLI, daemon, MCP tooling
-- `server/` - Telegram bot + HTTP API + Socket.IO
+- `hub/` - Telegram bot + HTTP API + Socket.IO
 - `web/` - React Mini App / PWA
 - `shared/` - Shared utilities
 
-Key docs: `README.md`, `AGENTS.md`, `cli/README.md`, `server/README.md`, `web/README.md`
+Key docs: `README.md`, `AGENTS.md`, `cli/README.md`, `hub/README.md`, `web/README.md`
 
 Repo rules: TypeScript strict; Bun workspaces (run `bun` from repo root); path alias `@/*`; prefer 4-space indentation; no backward compatibility required.
 

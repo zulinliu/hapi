@@ -47,6 +47,12 @@ hapi grok --hapi-provider <profile-uuid>
 
 Use `--hapi-provider system` to bypass the managed default.
 
+## Agent launch mappings
+
+- Claude Code uses `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, plus an optional `ANTHROPIC_BASE_URL`.
+- Codex uses `OPENAI_API_KEY` for the official endpoint. Custom endpoints receive an ephemeral process-level `model_provider` configuration while preserving the normal `CODEX_HOME`.
+- Grok Build uses `XAI_API_KEY` and an optional `XAI_BASE_URL`.
+
 ## Security
 
 - Never place credentials in an API URL.

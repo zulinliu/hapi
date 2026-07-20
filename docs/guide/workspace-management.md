@@ -40,6 +40,8 @@ The **Git** tab discovers the repository containing the current directory and su
 
 For GitHub clones, HAPI prefers authenticated gh repo clone when available and falls back to git clone. Local working-tree operations and pushes use Git. Configure Git or GitHub CLI credentials on the runner machine; HAPI never accepts credentials embedded in a remote URL.
 
+The commit form defaults to a Conventional Commit template and can switch to a custom message. This preference is stored on the runner in `$HAPI_HOME/git-preferences.json`, keyed by repository; it does not change project files or Git configuration.
+
 ## Security
 
 - Workspace paths are canonicalized with realpath; symlink escapes are rejected.

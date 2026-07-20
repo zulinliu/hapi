@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-    FileOperationSchema,
-    GitOperationSchema,
     ProviderProfileInputSchema,
     ProviderProfileUpdateSchema,
     parseProviderModelReference
-} from './hostManagement'
+} from './providerManagement'
 
 describe('provider profile schemas', () => {
     it('allows Claude auth tokens but requires API keys for Codex', () => {
@@ -89,31 +87,4 @@ describe('provider profile schemas', () => {
         })
     })
 
-    it('supports safe copy conflict policies and branch lifecycle operations', () => {
-        expect(FileOperationSchema.safeParse({
-            kind: 'copy',
-            sources: ['/workspace/a.txt'],
-            destination: '/workspace/destination',
-            conflict: 'new-copy',
-            createDestination: true
-        }).success).toBe(true)
-        expect(GitOperationSchema.safeParse({
-            kind: 'create-branch',
-            repository: '/workspace/repository',
-            name: 'feature/provider-models',
-            startPoint: 'origin/main',
-            switchTo: true
-        }).success).toBe(true)
-        expect(GitOperationSchema.safeParse({
-            kind: 'delete-remote-branch',
-            repository: '/workspace/repository',
-            remote: 'origin',
-            name: 'feature/provider-models'
-        }).success).toBe(true)
-        expect(GitOperationSchema.safeParse({
-            kind: 'set-commit-template',
-            repository: '/workspace/repository',
-            template: 'conventional'
-        }).success).toBe(true)
-    })
 })

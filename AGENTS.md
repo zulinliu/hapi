@@ -48,6 +48,9 @@ Bun workspaces; `shared` consumed by cli, hub, web.
 - `hub/README.md` - Hub config, HTTP API, Socket.IO events
 - `web/README.md` - Routes, components, hooks
 - `docs/guide/` - User guides (installation, how-it-works, FAQ)
+- `docs/guide/workspace-management.md` - Scoped host file and Git controls
+- `docs/guide/api-providers.md` - Machine-local managed provider profiles
+- `docs/agents/host-operation-security.md` - Host-operation review checklist
 
 ## Shared rules
 
@@ -64,7 +67,7 @@ Bun workspaces; `shared` consumed by cli, hub, web.
 
 ```bash
 bun typecheck           # All packages
-bun run test            # cli + hub tests
+bun run test            # CLI, hub, web, and shared tests
 bun run dev             # hub + web concurrently
 bun run build:single-exe # All-in-one binary
 ```
@@ -78,6 +81,7 @@ bun run build:single-exe # All-in-one binary
 - `agent/` - Multi-agent support (Gemini via ACP)
 - `runner/` - Background daemon for remote spawn
 - `commands/` - CLI subcommands (auth, runner, doctor)
+- `host/` - Scoped workspace and managed provider operations
 - `modules/` - Tool implementations (ripgrep, difftastic, git)
 - `ui/` - Terminal UI (Ink components)
 
@@ -105,13 +109,15 @@ bun run build:single-exe # All-in-one binary
 ### Shared (`shared/src/`)
 - `types.ts` - Core types (Session, Message, Machine)
 - `schemas.ts` - Zod schemas for validation
+- `workspaceManagement.ts` - Workspace file/Git RPC schemas
+- `providerManagement.ts` - Managed provider RPC schemas
 - `socket.ts` - Socket.IO event types
 - `messages.ts` - Message parsing utilities
 - `modes.ts` - Permission/model mode definitions
 
 ## Pre-push self-review (agents)
 
-Before commit/push/PR: use the **`pre-push-review`** skill (`~/.cursor/skills/pre-push-review/`).
+Before commit/push/PR, run this checklist:
 
 1. **Mechanical:** `bun typecheck && bun run test` (matches `.github/workflows/test.yml`)
 2. **Logic:** skim `git diff origin/main...HEAD`; apply `.github/prompts/codex-pr-review.md` as a local Major checklist (no Codex required)
@@ -125,7 +131,7 @@ Before commit/push/PR: use the **`pre-push-review`** skill (`~/.cursor/skills/pr
 - Run: `bun run test` (from root) or `bun run test` (from package)
 - Hub tests: `hub/src/**/*.test.ts`
 - CLI tests: `cli/src/**/*.test.ts`
-- No web tests currently
+- Web component and utility tests use Vitest
 
 ## Common tasks
 
