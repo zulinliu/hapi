@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { cp, lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, open, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from 'node:path'
 import { MAX_HOST_FILE_UPLOAD_BYTES } from '@hapi/protocol'
 import type {
@@ -159,27 +159,39 @@ export class FileManager {
 
     async readPreview(rawPath: string): Promise<HostFilePreviewResponse> {
         const path = await this.scope.resolveReadableNonGitMetadata(rawPath)
-        const info = await stat(path)
-        if (!info.isFile()) throw new Error('Path is not a file')
-        const base = {
-            success: true as const,
-            path,
-            name: basename(path),
-            mimeType: mimeTypeFor(path),
-            size: info.size,
-            modified: Math.round(info.mtimeMs)
+        const handle = await open(path, 'r')
+        try {
+            const openedInfo = await handle.stat()
+            const currentPath = await this.scope.resolveReadableNonGitMetadata(path)
+            const currentInfo = await stat(currentPath)
+            if (!openedInfo.isFile() || openedInfo.dev !== currentInfo.dev || openedInfo.ino !== currentInfo.ino) {
+                throw new Error('File changed while being previewed')
+            }
+            const base = {
+                success: true as const,
+                path,
+                name: basename(path),
+                mimeType: mimeTypeFor(path),
+                size: openedInfo.size,
+                modified: Math.round(openedInfo.mtimeMs)
+            }
+            if (openedInfo.size > MAX_PREVIEW_BYTES) {
+                return { ...base, kind: 'binary' }
+            }
+            const bytes = await handle.readFile()
+            if (bytes.byteLength !== openedInfo.size || bytes.byteLength > MAX_PREVIEW_BYTES) {
+                throw new Error('File changed while being previewed')
+            }
+            if (base.mimeType.startsWith('image/')) {
+                return { ...base, kind: 'image', base64: bytes.toString('base64') }
+            }
+            if (!isTextPreview(path, bytes)) {
+                return { ...base, kind: 'binary' }
+            }
+            return { ...base, kind: 'text', text: bytes.toString('utf8') }
+        } finally {
+            await handle.close()
         }
-        if (info.size > MAX_PREVIEW_BYTES) {
-            return { ...base, kind: 'binary' }
-        }
-        const bytes = await readFile(path)
-        if (base.mimeType.startsWith('image/')) {
-            return { ...base, kind: 'image', base64: bytes.toString('base64') }
-        }
-        if (!isTextPreview(path, bytes)) {
-            return { ...base, kind: 'binary' }
-        }
-        return { ...base, kind: 'text', text: bytes.toString('utf8') }
     }
 
     async writeText(request: HostFileWriteRequest): Promise<HostFilePreviewResponse> {
@@ -287,6 +299,7 @@ export class FileManager {
                     if (context.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
                     const path = paths[index]
                     context.report(index / operation.paths.length, `Deleting ${basename(path)}`)
+                    await assertNoGitMetadataTree(path)
                     await rm(path, { recursive: true, force: false })
                     deleted.push(path)
                 }
@@ -345,7 +358,7 @@ export class FileManager {
         const skipped: string[] = []
         for (let index = 0; index < plans.length; index += 1) {
             if (context.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
-            const { source } = plans[index]
+            const { source, sourceInfo } = plans[index]
             let target = plans[index].target
 
             // A copy dialog defaults to the current directory. Treat its
@@ -375,19 +388,40 @@ export class FileManager {
             }
 
             context.report(index / operation.sources.length, `${move ? 'Moving' : 'Copying'} ${basename(source)}`)
+            if (move && sourceInfo.isDirectory()) await assertNoGitMetadataTree(source)
             if (move) {
                 try {
                     await rename(source, target)
                 } catch (error) {
                     if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
-                    await cp(source, target, { recursive: true, errorOnExist: true, force: false, dereference: false })
+                    await cp(source, target, {
+                        recursive: true,
+                        errorOnExist: true,
+                        force: false,
+                        dereference: false,
+                        filter: async (path) => await this.validateCopyEntry(path)
+                    })
                     await rm(source, { recursive: true, force: false })
                 }
             } else {
-                await cp(source, target, { recursive: true, errorOnExist: true, force: false, dereference: false })
+                await cp(source, target, {
+                    recursive: true,
+                    errorOnExist: true,
+                    force: false,
+                    dereference: false,
+                    filter: async (path) => await this.validateCopyEntry(path)
+                })
             }
             completed.push(target)
         }
         return { paths: completed, replaced, skipped }
+    }
+
+    private async validateCopyEntry(path: string): Promise<boolean> {
+        if (basename(path).toLowerCase() === '.git') {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
+        await this.scope.resolveReadableNonGitMetadata(path)
+        return true
     }
 }

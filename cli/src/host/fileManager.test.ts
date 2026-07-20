@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FileManager } from './fileManager'
 import { WorkspaceScope } from './workspaceScope'
 
@@ -9,13 +10,15 @@ const created: string[] = []
 const context = { signal: new AbortController().signal, report: () => {} }
 
 afterEach(async () => {
+    vi.restoreAllMocks()
     await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
-async function createManager(): Promise<{ root: string; manager: FileManager }> {
+async function createManager(): Promise<{ root: string; scope: WorkspaceScope; manager: FileManager }> {
     const root = await mkdtemp(join(tmpdir(), 'hapi-files-'))
     created.push(root)
-    return { root, manager: new FileManager(await WorkspaceScope.create([root])) }
+    const scope = await WorkspaceScope.create([root])
+    return { root, scope, manager: new FileManager(scope) }
 }
 
 describe('FileManager', () => {
@@ -140,6 +143,57 @@ describe('FileManager', () => {
             await expect(stat(join(metadata, `${kind}.txt`))).rejects.toMatchObject({ code: 'ENOENT' })
         })
     }
+
+    for (const kind of ['copy', 'move'] as const) {
+        it(`rejects Git metadata inserted while recursively ${kind === 'copy' ? 'copying' : 'moving'}`, async () => {
+            const { root, manager } = await createManager()
+            const source = join(root, 'source')
+            const destination = join(root, 'destination')
+            const gitConfig = join(source, '.git', 'config')
+            await mkdir(source)
+            await mkdir(destination)
+            await writeFile(join(source, 'file.txt'), 'source')
+            let inserted = false
+            const raceContext = {
+                signal: context.signal,
+                report: () => {
+                    if (inserted) return
+                    mkdirSync(join(source, '.git'))
+                    writeFileSync(gitConfig, '[core]')
+                    inserted = true
+                }
+            }
+
+            await expect(manager.execute({
+                kind,
+                sources: [source],
+                destination,
+                conflict: 'fail'
+            }, raceContext)).rejects.toThrow(/Git metadata/)
+
+            expect(inserted).toBe(true)
+            expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+            await expect(stat(join(destination, 'source', '.git', 'config'))).rejects.toMatchObject({ code: 'ENOENT' })
+        })
+    }
+
+    it('rejects Git metadata inserted immediately before recursive deletion', async () => {
+        const { root, manager } = await createManager()
+        const source = join(root, 'source')
+        const gitConfig = join(source, '.git', 'config')
+        await mkdir(source)
+        await writeFile(join(source, 'file.txt'), 'source')
+        const raceContext = {
+            signal: context.signal,
+            report: () => {
+                mkdirSync(join(source, '.git'))
+                writeFileSync(gitConfig, '[core]')
+            }
+        }
+
+        await expect(manager.execute({ kind: 'delete', paths: [source] }, raceContext)).rejects.toThrow(/Git metadata/)
+        expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+    })
 
     for (const kind of ['copy', 'move', 'delete'] as const) {
         it(`refuses to ${kind} a directory containing nested Git metadata`, async () => {
@@ -340,5 +394,24 @@ describe('FileManager', () => {
             expectedModified: preview.modified,
             expectedSize: preview.size
         })).rejects.toThrow(/changed since it was opened/i)
+    })
+
+    it.skipIf(process.platform === 'win32')('does not preview a file retargeted after scope validation', async () => {
+        const { root, scope, manager } = await createManager()
+        const outside = await mkdtemp(join(tmpdir(), 'hapi-preview-outside-'))
+        created.push(outside)
+        const file = join(root, 'notes.md')
+        const secret = join(outside, 'secret.md')
+        await writeFile(file, 'workspace content')
+        await writeFile(secret, 'outside secret')
+        const resolveReadable = scope.resolveReadableNonGitMetadata.bind(scope)
+        vi.spyOn(scope, 'resolveReadableNonGitMetadata').mockImplementationOnce(async (path) => {
+            const resolved = await resolveReadable(path)
+            await rm(resolved)
+            await symlink(secret, resolved)
+            return resolved
+        })
+
+        await expect(manager.readPreview(file)).rejects.toThrow(/outside configured workspace roots|changed while being previewed/)
     })
 })
