@@ -403,6 +403,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
             extraEnv = {
               ...launch.env,
               HAPI_PROVIDER_PROFILE_ID: launch.profile.id,
+              HAPI_PROVIDER_PROFILE_AGENT: agent,
               HAPI_PROVIDER_PROFILE_NAME: launch.profile.name,
               HAPI_PROVIDER_PROFILE_REVISION: String(launch.profile.revision),
               ...(agent === 'codex' && launch.args.length > 0
@@ -480,6 +481,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
           env: (() => {
             const env = { ...process.env };
             delete env.HAPI_PROVIDER_PROFILE_ID;
+            delete env.HAPI_PROVIDER_PROFILE_AGENT;
             delete env.HAPI_PROVIDER_PROFILE_NAME;
             delete env.HAPI_PROVIDER_PROFILE_REVISION;
             delete env.HAPI_PROVIDER_PROFILE_SYSTEM;

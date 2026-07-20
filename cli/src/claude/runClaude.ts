@@ -22,6 +22,7 @@ import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { normalizeClaudeSessionModel } from './model';
 import { normalizeClaudeSessionEffort } from './effort';
 import { getInvokedCwd } from '@/utils/invokedCwd';
+import { buildManagedClaudeSettingsEnv } from '@/host/claudeProviderSettings';
 
 export interface StartOptions {
     model?: string
@@ -56,6 +57,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const initialState: AgentState = {};
     const initialModel = normalizeClaudeSessionModel(options.model);
     const initialEffort = normalizeClaudeSessionEffort(options.effort);
+    const managedProviderSettingsEnv = buildManagedClaudeSettingsEnv(process.env, initialModel);
     const bootstrap = options.existingSessionId
         ? await bootstrapExistingSession({
             sessionId: options.existingSessionId,
@@ -124,7 +126,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, {
         filenamePrefix: 'session-hook',
-        logLabel: 'generateHookSettings'
+        logLabel: 'generateHookSettings',
+        env: managedProviderSettingsEnv
     });
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
 

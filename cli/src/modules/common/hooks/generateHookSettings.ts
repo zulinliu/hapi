@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
+import { chmodSync, writeFileSync, mkdirSync, unlinkSync, existsSync, readdirSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
+import { isProcessAlive } from '@/utils/process';
 
 type HookCommandConfig = {
     matcher: string;
@@ -13,6 +15,7 @@ type HookCommandConfig = {
 };
 
 type HookSettings = {
+    env?: Record<string, string>;
     hooksConfig?: {
         enabled?: boolean;
     };
@@ -25,6 +28,7 @@ export type HookSettingsOptions = {
     filenamePrefix: string;
     logLabel: string;
     hooksEnabled?: boolean;
+    env?: Record<string, string>;
 };
 
 function shellQuote(value: string): string {
@@ -43,7 +47,32 @@ function shellJoin(parts: string[]): string {
     return parts.map(shellQuote).join(' ');
 }
 
-function buildHookSettings(command: string, hooksEnabled?: boolean): HookSettings {
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cleanupStaleSettingsFiles(hooksDir: string, filenamePrefix: string): void {
+    const pattern = new RegExp(`^${escapeRegExp(filenamePrefix)}-(\\d+)(?:-[0-9a-f-]+)?\\.json$`);
+    try {
+        for (const entry of readdirSync(hooksDir, { withFileTypes: true })) {
+            if (!entry.isFile()) continue;
+            const match = pattern.exec(entry.name);
+            if (!match) continue;
+            const ownerPid = Number(match[1]);
+            if (ownerPid === process.pid || isProcessAlive(ownerPid)) continue;
+            unlinkSync(join(hooksDir, entry.name));
+            logger.debug(`[generateHookSettings] Cleaned stale settings file: ${entry.name}`);
+        }
+    } catch (error) {
+        logger.debug(`[generateHookSettings] Failed to clean stale settings files: ${error}`);
+    }
+}
+
+function buildHookSettings(
+    command: string,
+    hooksEnabled?: boolean,
+    env?: Record<string, string>
+): HookSettings {
     const hooks: HookSettings['hooks'] = {
         SessionStart: [
             {
@@ -59,6 +88,9 @@ function buildHookSettings(command: string, hooksEnabled?: boolean): HookSetting
     };
 
     const settings: HookSettings = { hooks };
+    if (env && Object.keys(env).length > 0) {
+        settings.env = env;
+    }
     if (hooksEnabled !== undefined) {
         settings.hooksConfig = {
             enabled: hooksEnabled
@@ -74,9 +106,13 @@ export function generateHookSettingsFile(
     options: HookSettingsOptions
 ): string {
     const hooksDir = join(configuration.happyHomeDir, 'tmp', 'hooks');
-    mkdirSync(hooksDir, { recursive: true });
+    mkdirSync(hooksDir, { recursive: true, mode: 0o700 });
+    if (process.platform !== 'win32') {
+        chmodSync(hooksDir, 0o700);
+    }
+    cleanupStaleSettingsFiles(hooksDir, options.filenamePrefix);
 
-    const filename = `${options.filenamePrefix}-${process.pid}.json`;
+    const filename = `${options.filenamePrefix}-${process.pid}-${randomUUID()}.json`;
     const filepath = join(hooksDir, filename);
 
     const { command, args } = getHappyCliCommand([
@@ -88,9 +124,13 @@ export function generateHookSettingsFile(
     ]);
     const hookCommand = shellJoin([command, ...args]);
 
-    const settings = buildHookSettings(hookCommand, options.hooksEnabled);
+    const settings = buildHookSettings(hookCommand, options.hooksEnabled, options.env);
 
-    writeFileSync(filepath, JSON.stringify(settings, null, 4));
+    writeFileSync(filepath, JSON.stringify(settings, null, 4), {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o600
+    });
     logger.debug(`[${options.logLabel}] Created hook settings file: ${filepath}`);
 
     return filepath;

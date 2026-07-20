@@ -20,6 +20,7 @@ function clearConflictingCredentials(agent: AgentProvider): void {
 
 function clearProviderMetadata(): void {
     delete process.env.HAPI_PROVIDER_PROFILE_ID
+    delete process.env.HAPI_PROVIDER_PROFILE_AGENT
     delete process.env.HAPI_PROVIDER_PROFILE_NAME
     delete process.env.HAPI_PROVIDER_PROFILE_REVISION
     delete process.env.HAPI_PROVIDER_PROFILE_SYSTEM
@@ -33,20 +34,24 @@ export async function applyProviderSelection(
 ): Promise<AgentLaunchConfiguration | null> {
     if (requestedId !== undefined) {
         clearProviderMetadata()
-        clearConflictingCredentials(agent)
         if (requestedId === null) {
             process.env.HAPI_PROVIDER_PROFILE_SYSTEM = '1'
             return null
         }
     } else if (process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1') {
         delete process.env.HAPI_PROVIDER_PROFILE_ID
+        delete process.env.HAPI_PROVIDER_PROFILE_AGENT
         delete process.env.HAPI_PROVIDER_PROFILE_NAME
         delete process.env.HAPI_PROVIDER_PROFILE_REVISION
         delete process.env.HAPI_CODEX_PROVIDER_ARGS
         delete process.env.HAPI_CODEX_PROVIDER_API_KEY
         return null
     } else if (process.env.HAPI_PROVIDER_PROFILE_ID) {
-        return null
+        const inheritedAgent = process.env.HAPI_PROVIDER_PROFILE_AGENT
+        if (!inheritedAgent || inheritedAgent === agent) {
+            return null
+        }
+        clearProviderMetadata()
     }
 
     const profile = await new ProviderRegistry().resolve(agent, requestedId)
@@ -59,6 +64,7 @@ export async function applyProviderSelection(
     clearConflictingCredentials(agent)
     Object.assign(process.env, launch.env, {
         HAPI_PROVIDER_PROFILE_ID: launch.profile.id,
+        HAPI_PROVIDER_PROFILE_AGENT: agent,
         HAPI_PROVIDER_PROFILE_NAME: launch.profile.name,
         HAPI_PROVIDER_PROFILE_REVISION: String(launch.profile.revision)
     })
