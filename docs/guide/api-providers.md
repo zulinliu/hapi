@@ -33,6 +33,8 @@ This creates a normal 200K choice and a 1M choice. The suffix is only a HAPI sel
 
 Set a machine default to use a profile whenever that Agent starts on the selected machine. **Machine default** uses that profile when one is configured and otherwise falls back to the Agent's existing login. **System / agent login** always bypasses managed profiles and uses the Agent's existing login and environment.
 
+For managed Claude Code profiles, HAPI applies the selected endpoint and credential with launch-specific settings. These settings take precedence over provider-related `env` entries in Claude Code's user or project settings for that session. Choosing **System / agent login** leaves those native Claude settings untouched.
+
 You can override the choice while creating a session. A running session can select models that its Agent exposes; applying another provider requires a new or restarted session.
 
 Terminal launches use the machine default too. Override it without exposing credentials in command history:

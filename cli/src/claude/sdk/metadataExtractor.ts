@@ -12,11 +12,15 @@ export interface SDKMetadata {
     slashCommands?: string[]
 }
 
+export type SDKMetadataOptions = {
+    settingsPath?: string
+}
+
 /**
  * Extract SDK metadata by running a minimal query and capturing the init message
  * @returns SDK metadata containing tools and slash commands
  */
-export async function extractSDKMetadata(): Promise<SDKMetadata> {
+export async function extractSDKMetadata(options: SDKMetadataOptions = {}): Promise<SDKMetadata> {
     const abortController = new AbortController()
     
     try {
@@ -28,7 +32,8 @@ export async function extractSDKMetadata(): Promise<SDKMetadata> {
             options: {
                 allowedTools: ['Bash(echo)'],
                 maxTurns: 1,
-                abort: abortController.signal
+                abort: abortController.signal,
+                settingsPath: options.settingsPath
             }
         })
 
@@ -69,11 +74,14 @@ export async function extractSDKMetadata(): Promise<SDKMetadata> {
  * Extract SDK metadata asynchronously without blocking
  * Fires the extraction and updates metadata when complete
  */
-export function extractSDKMetadataAsync(onComplete: (metadata: SDKMetadata) => void): void {
-    extractSDKMetadata()
-        .then(metadata => {
+export function extractSDKMetadataAsync(
+    onComplete: (metadata: SDKMetadata) => void | Promise<void>,
+    options: SDKMetadataOptions = {}
+): Promise<void> {
+    return extractSDKMetadata(options)
+        .then(async (metadata) => {
             if (metadata.tools || metadata.slashCommands) {
-                onComplete(metadata)
+                await onComplete(metadata)
             }
         })
         .catch(error => {

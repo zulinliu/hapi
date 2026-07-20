@@ -210,6 +210,7 @@ describe('bootstrapExistingSession', () => {
         vi.stubEnv('HAPI_PROVIDER_PROFILE_ID', '11111111-1111-4111-8111-111111111111')
         vi.stubEnv('HAPI_PROVIDER_PROFILE_NAME', 'Codex proxy')
         vi.stubEnv('HAPI_PROVIDER_PROFILE_REVISION', '3')
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_AGENT', 'codex')
         vi.stubEnv('HAPI_CODEX_PROVIDER_API_KEY', 'do-not-persist')
 
         const metadata = buildSessionMetadata({
@@ -229,6 +230,7 @@ describe('bootstrapExistingSession', () => {
 
     it('records an explicit system-provider selection without stale managed metadata', () => {
         vi.stubEnv('HAPI_PROVIDER_PROFILE_SYSTEM', '1')
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_AGENT', 'claude')
         vi.stubEnv('HAPI_PROVIDER_PROFILE_ID', '11111111-1111-4111-8111-111111111111')
         vi.stubEnv('HAPI_PROVIDER_PROFILE_NAME', 'Stale profile')
         vi.stubEnv('HAPI_PROVIDER_PROFILE_REVISION', '2')
@@ -241,6 +243,24 @@ describe('bootstrapExistingSession', () => {
         })
 
         expect(metadata.providerProfileId).toBeNull()
+        expect(metadata.providerProfileName).toBeUndefined()
+        expect(metadata.providerProfileRevision).toBeUndefined()
+    })
+
+    it('ignores managed provider identity inherited from another agent', () => {
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_ID', '11111111-1111-4111-8111-111111111111')
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_NAME', 'Codex proxy')
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_REVISION', '3')
+        vi.stubEnv('HAPI_PROVIDER_PROFILE_AGENT', 'codex')
+
+        const metadata = buildSessionMetadata({
+            flavor: 'claude',
+            startedBy: 'runner',
+            workingDirectory: '/tmp/project',
+            machineId: 'machine-1'
+        })
+
+        expect(metadata.providerProfileId).toBeUndefined()
         expect(metadata.providerProfileName).toBeUndefined()
         expect(metadata.providerProfileRevision).toBeUndefined()
     })

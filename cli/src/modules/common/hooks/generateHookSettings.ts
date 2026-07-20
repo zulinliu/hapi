@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, unlinkSync, existsSync, chmodSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
@@ -12,19 +13,24 @@ type HookCommandConfig = {
     }>;
 };
 
-type HookSettings = {
+type ClaudeSettings = {
+    env?: Record<string, string>;
     hooksConfig?: {
         enabled?: boolean;
     };
-    hooks: {
+    hooks?: {
         SessionStart: HookCommandConfig[];
     };
 };
 
-export type HookSettingsOptions = {
+export type SettingsFileOptions = {
     filenamePrefix: string;
     logLabel: string;
+};
+
+export type HookSettingsOptions = SettingsFileOptions & {
     hooksEnabled?: boolean;
+    settingsEnv?: Record<string, string>;
 };
 
 function shellQuote(value: string): string {
@@ -43,8 +49,12 @@ function shellJoin(parts: string[]): string {
     return parts.map(shellQuote).join(' ');
 }
 
-function buildHookSettings(command: string, hooksEnabled?: boolean): HookSettings {
-    const hooks: HookSettings['hooks'] = {
+function buildHookSettings(
+    command: string,
+    hooksEnabled?: boolean,
+    settingsEnv?: Record<string, string>
+): ClaudeSettings {
+    const hooks: NonNullable<ClaudeSettings['hooks']> = {
         SessionStart: [
             {
                 matcher: '*',
@@ -58,7 +68,10 @@ function buildHookSettings(command: string, hooksEnabled?: boolean): HookSetting
         ]
     };
 
-    const settings: HookSettings = { hooks };
+    const settings: ClaudeSettings = { hooks };
+    if (settingsEnv && Object.keys(settingsEnv).length > 0) {
+        settings.env = { ...settingsEnv };
+    }
     if (hooksEnabled !== undefined) {
         settings.hooksConfig = {
             enabled: hooksEnabled
@@ -68,17 +81,35 @@ function buildHookSettings(command: string, hooksEnabled?: boolean): HookSetting
     return settings;
 }
 
+function writePrivateSettingsFile(settings: ClaudeSettings, options: SettingsFileOptions): string {
+    const hooksDir = join(configuration.happyHomeDir, 'tmp', 'hooks');
+    mkdirSync(hooksDir, { recursive: true, mode: 0o700 });
+    if (process.platform !== 'win32') {
+        chmodSync(hooksDir, 0o700);
+    }
+
+    const filename = `${options.filenamePrefix}-${process.pid}-${randomUUID()}.json`;
+    const filepath = join(hooksDir, filename);
+    writeFileSync(filepath, JSON.stringify(settings, null, 4), { mode: 0o600, flag: 'wx' });
+    if (process.platform !== 'win32') {
+        chmodSync(filepath, 0o600);
+    }
+    logger.debug(`[${options.logLabel}] Created Claude settings file: ${filepath}`);
+    return filepath;
+}
+
+export function generateProviderSettingsFile(
+    settingsEnv: Record<string, string>,
+    options: SettingsFileOptions
+): string {
+    return writePrivateSettingsFile({ env: { ...settingsEnv } }, options);
+}
+
 export function generateHookSettingsFile(
     port: number,
     token: string,
     options: HookSettingsOptions
 ): string {
-    const hooksDir = join(configuration.happyHomeDir, 'tmp', 'hooks');
-    mkdirSync(hooksDir, { recursive: true });
-
-    const filename = `${options.filenamePrefix}-${process.pid}.json`;
-    const filepath = join(hooksDir, filename);
-
     const { command, args } = getHappyCliCommand([
         'hook-forwarder',
         '--port',
@@ -88,12 +119,8 @@ export function generateHookSettingsFile(
     ]);
     const hookCommand = shellJoin([command, ...args]);
 
-    const settings = buildHookSettings(hookCommand, options.hooksEnabled);
-
-    writeFileSync(filepath, JSON.stringify(settings, null, 4));
-    logger.debug(`[${options.logLabel}] Created hook settings file: ${filepath}`);
-
-    return filepath;
+    const settings = buildHookSettings(hookCommand, options.hooksEnabled, options.settingsEnv);
+    return writePrivateSettingsFile(settings, options);
 }
 
 export function cleanupHookSettingsFile(filepath: string, logLabel: string): void {

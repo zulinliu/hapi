@@ -29,6 +29,7 @@ import { hashRunnerCliApiToken, hashRunnerExtraHeaders } from './runnerIdentity'
 import { scheduleCursorModelsPrewarm } from '@/modules/common/cursorModelsPrewarm';
 import { ProviderRegistry } from '@/host/providerRegistry';
 import { resolveProviderLaunch } from '@/host/providerAdapters';
+import { buildRunnerSessionEnv } from './providerSpawnEnv';
 
 export async function startRunner(options: { workspaceRoots?: string[] } = {}): Promise<void> {
   // We don't have cleanup function at the time of server construction
@@ -405,6 +406,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
               HAPI_PROVIDER_PROFILE_ID: launch.profile.id,
               HAPI_PROVIDER_PROFILE_NAME: launch.profile.name,
               HAPI_PROVIDER_PROFILE_REVISION: String(launch.profile.revision),
+              HAPI_PROVIDER_PROFILE_AGENT: agent,
               ...(agent === 'codex' && launch.args.length > 0
                 ? { HAPI_CODEX_PROVIDER_ARGS: JSON.stringify(launch.args) }
                 : {})
@@ -414,6 +416,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
             }
           } else if (options.providerProfileId === null) {
             extraEnv.HAPI_PROVIDER_PROFILE_SYSTEM = '1';
+            extraEnv.HAPI_PROVIDER_PROFILE_AGENT = agent;
           }
         }
 
@@ -477,29 +480,12 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
           cwd: spawnDirectory,
           detached: true,  // Sessions stay alive when runner stops
           stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
-          env: (() => {
-            const env = { ...process.env };
-            delete env.HAPI_PROVIDER_PROFILE_ID;
-            delete env.HAPI_PROVIDER_PROFILE_NAME;
-            delete env.HAPI_PROVIDER_PROFILE_REVISION;
-            delete env.HAPI_PROVIDER_PROFILE_SYSTEM;
-            delete env.HAPI_CODEX_PROVIDER_API_KEY;
-            delete env.HAPI_CODEX_PROVIDER_ARGS;
-            if (managedProvider && agent === 'claude') {
-              delete env.CLAUDE_CODE_OAUTH_TOKEN;
-              delete env.ANTHROPIC_API_KEY;
-              delete env.ANTHROPIC_AUTH_TOKEN;
-              delete env.ANTHROPIC_BASE_URL;
-            } else if (managedProvider && agent === 'codex') {
-                delete env.OPENAI_API_KEY;
-                delete env.HAPI_CODEX_PROVIDER_API_KEY;
-                delete env.HAPI_CODEX_PROVIDER_ARGS;
-            } else if (managedProvider && agent === 'grok') {
-              delete env.XAI_API_KEY;
-              delete env.XAI_BASE_URL;
-            }
-            return { ...env, ...extraEnv };
-          })()
+          env: buildRunnerSessionEnv({
+            parentEnv: process.env,
+            extraEnv,
+            managedProvider,
+            agent
+          })
         });
 
         happyProcess.stderr?.on('data', (data) => {

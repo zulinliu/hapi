@@ -6,7 +6,12 @@ import { parseProviderModelReference } from '@hapi/protocol'
  * managed provider profiles are the only launches that strip the marker.
  */
 export function resolveManagedProviderWireModel(model: string | null | undefined): string | null | undefined {
-    if (!model || !process.env.HAPI_PROVIDER_PROFILE_ID || !/\[1m\]\s*$/i.test(model)) {
+    if (
+        !model
+        || !process.env.HAPI_PROVIDER_PROFILE_ID
+        || process.env.HAPI_PROVIDER_PROFILE_AGENT !== 'claude'
+        || !/\[1m\]\s*$/i.test(model)
+    ) {
         return model
     }
     return parseProviderModelReference(model).id
