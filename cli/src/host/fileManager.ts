@@ -198,7 +198,7 @@ export class FileManager {
     }
 
     async upload(request: HostFileUploadRequest): Promise<HostFileUploadResponse> {
-        const directory = await this.scope.resolveReadable(request.directory)
+        const directory = await this.scope.resolveReadableNonGitMetadata(request.directory)
         const directoryInfo = await stat(directory)
         if (!directoryInfo.isDirectory()) throw new Error('Upload destination is not a directory')
         const bytes = decodeUploadBase64(request.contentBase64)
@@ -250,7 +250,7 @@ export class FileManager {
                     ...await Promise.all(operation.sources.map((path) => this.scope.resolveMutableExisting(path))),
                     operation.createDestination
                         ? await this.scope.resolveDestination(operation.destination)
-                        : await this.scope.resolveReadable(operation.destination)
+                        : await this.scope.resolveReadableNonGitMetadata(operation.destination)
                 ]
             case 'delete':
                 return await Promise.all(operation.paths.map((path) => this.scope.resolveMutableExisting(path)))
@@ -303,7 +303,7 @@ export class FileManager {
         let destinationDirectory: string
         let createDestination = false
         try {
-            destinationDirectory = await this.scope.resolveReadable(operation.destination)
+            destinationDirectory = await this.scope.resolveReadableNonGitMetadata(operation.destination)
             const destinationStat = await stat(destinationDirectory)
             if (!destinationStat.isDirectory()) throw new Error('Destination is not a directory')
         } catch (error) {

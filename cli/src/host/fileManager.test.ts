@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { FileManager } from './fileManager'
@@ -102,6 +102,44 @@ describe('FileManager', () => {
         await expect(manager.list(gitDirectory, true)).rejects.toThrow(/Git metadata/)
         await expect(manager.readPreview(gitConfig)).rejects.toThrow(/Git metadata/)
     })
+
+    it('refuses uploads through a .git directory symlink', async () => {
+        const { root, manager } = await createManager()
+        const metadata = join(root, 'metadata')
+        await mkdir(metadata)
+        await symlink(metadata, join(root, '.git'), 'dir')
+
+        await expect(manager.upload({
+            directory: join(root, '.git'),
+            name: 'config',
+            contentBase64: Buffer.from('[core]').toString('base64'),
+            conflict: 'fail'
+        })).rejects.toThrow(/Git metadata/)
+
+        await expect(stat(join(metadata, 'config'))).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+
+    for (const kind of ['copy', 'move'] as const) {
+        it(`refuses to ${kind} into a .git directory symlink`, async () => {
+            const { root, manager } = await createManager()
+            const metadata = join(root, 'metadata')
+            const source = join(root, `${kind}.txt`)
+            const operation = {
+                kind,
+                sources: [source],
+                destination: join(root, '.git'),
+                conflict: 'fail' as const
+            }
+            await mkdir(metadata)
+            await writeFile(source, kind)
+            await symlink(metadata, join(root, '.git'), 'dir')
+
+            await expect(manager.execute(operation, context)).rejects.toThrow(/Git metadata/)
+            await expect(manager.lockKeys(operation)).rejects.toThrow(/Git metadata/)
+            expect(await readFile(source, 'utf8')).toBe(kind)
+            await expect(stat(join(metadata, `${kind}.txt`))).rejects.toMatchObject({ code: 'ENOENT' })
+        })
+    }
 
     for (const kind of ['copy', 'move', 'delete'] as const) {
         it(`refuses to ${kind} a directory containing nested Git metadata`, async () => {
