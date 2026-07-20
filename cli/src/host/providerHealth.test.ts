@@ -74,4 +74,28 @@ describe('checkProviderHealth', () => {
             expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'secret-value' }) })
         )
     })
+
+    it('uses bearer authentication for Claude auth-token profiles', async () => {
+        const fetchMock = vi.fn(async (
+            _input: string | URL | Request,
+            _init?: RequestInit
+        ) => new Response(JSON.stringify({ data: [] }), { status: 200 }))
+        globalThis.fetch = fetchMock as unknown as typeof fetch
+
+        await checkProviderHealth(profile({
+            agent: 'claude',
+            protocol: 'anthropic-messages',
+            credentialType: 'auth-token',
+            baseUrl: 'https://anthropic.example'
+        }))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://anthropic.example/v1/models',
+            expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: 'Bearer secret-value' })
+            })
+        )
+        const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>
+        expect(headers['x-api-key']).toBeUndefined()
+    })
 })

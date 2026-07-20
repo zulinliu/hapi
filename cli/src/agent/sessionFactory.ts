@@ -64,7 +64,9 @@ export function buildSessionMetadata(options: {
     const providerProfileId = process.env.HAPI_PROVIDER_PROFILE_ID?.trim()
     const providerProfileName = process.env.HAPI_PROVIDER_PROFILE_NAME?.trim()
     const providerProfileRevision = Number(process.env.HAPI_PROVIDER_PROFILE_REVISION)
-    const usesSystemProvider = process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1'
+    const providerProfileAgent = process.env.HAPI_PROVIDER_PROFILE_AGENT?.trim()
+    const providerSelectionApplies = providerProfileAgent === options.flavor
+    const usesSystemProvider = providerSelectionApplies && process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1'
 
     return {
         path: options.workingDirectory,
@@ -84,9 +86,9 @@ export function buildSessionMetadata(options: {
         flavor: options.flavor,
         providerProfileId: usesSystemProvider
             ? null
-            : (providerProfileId || undefined),
-        providerProfileName: usesSystemProvider ? undefined : (providerProfileName || undefined),
-        providerProfileRevision: !usesSystemProvider && Number.isInteger(providerProfileRevision) && providerProfileRevision > 0
+            : (providerSelectionApplies ? providerProfileId || undefined : undefined),
+        providerProfileName: !usesSystemProvider && providerSelectionApplies ? providerProfileName || undefined : undefined,
+        providerProfileRevision: !usesSystemProvider && providerSelectionApplies && Number.isInteger(providerProfileRevision) && providerProfileRevision > 0
             ? providerProfileRevision
             : undefined,
         capabilities: {

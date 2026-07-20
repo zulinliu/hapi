@@ -14,6 +14,7 @@ Run official Claude Code / Codex / Cursor Agent / Grok Build / OpenCode sessions
 - **Voice Control** - Talk to your AI agent hands-free using the built-in voice assistant.
 - **Workspace Browser** - Opt-in via one or more `hapi runner start --workspace-root <path>` flags: browse scoped file trees from the web and start sessions in allowed subdirectories.
 - **Host Management** - Manage scoped workspace files, Git repositories, and machine-local API profiles for supported coding agents from the web.
+- **Managed API Providers** - Configure provider health checks and model choices for Claude Code, Codex, and Grok Build.
 
 ## Demo
 
@@ -42,6 +43,7 @@ For self-hosted options (Cloudflare Tunnel, Tailscale), see [Installation](docs/
 - [Grok Build](docs/guide/grok.md)
 - [Voice Assistant](docs/guide/voice-assistant.md)
 - [Host management](docs/guide/host-management.md)
+- [API Providers](docs/guide/api-providers.md)
 - [Why HAPI](docs/guide/why-hapi.md)
 - [FAQ](docs/guide/faq.md)
 

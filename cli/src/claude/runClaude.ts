@@ -9,7 +9,11 @@ import { parseSpecialCommand } from '@/parsers/specialCommands';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { startHookServer } from '@/claude/utils/startHookServer';
-import { generateHookSettingsFile, cleanupHookSettingsFile } from '@/modules/common/hooks/generateHookSettings';
+import {
+    cleanupHookSettingsFile,
+    generateHookSettingsFile,
+    generateProviderSettingsFile
+} from '@/modules/common/hooks/generateHookSettings';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import type { Session } from './session';
 import { bootstrapExistingSession, bootstrapSession } from '@/agent/sessionFactory';
@@ -22,7 +26,7 @@ import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { normalizeClaudeSessionModel } from './model';
 import { normalizeClaudeSessionEffort } from './effort';
 import { getInvokedCwd } from '@/utils/invokedCwd';
-import { buildManagedClaudeSettingsEnv } from '@/host/claudeProviderSettings';
+import { resolveManagedClaudeSettingsEnv } from '@/host/claudeProviderSettings';
 
 export interface StartOptions {
     model?: string
@@ -41,6 +45,7 @@ export interface StartOptions {
 export async function runClaude(options: StartOptions = {}): Promise<void> {
     const workingDirectory = options.workingDirectory ?? getInvokedCwd();
     const startedBy = options.startedBy ?? 'terminal';
+    const managedProviderSettingsEnv = resolveManagedClaudeSettingsEnv();
 
     // Log environment info at startup
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
@@ -57,7 +62,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const initialState: AgentState = {};
     const initialModel = normalizeClaudeSessionModel(options.model);
     const initialEffort = normalizeClaudeSessionEffort(options.effort);
-    const managedProviderSettingsEnv = buildManagedClaudeSettingsEnv(process.env, initialModel);
     const bootstrap = options.existingSessionId
         ? await bootstrapExistingSession({
             sessionId: options.existingSessionId,
@@ -75,22 +79,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         });
     const { api, session, sessionInfo } = bootstrap;
     logger.debug(`Session created: ${sessionInfo.id}`);
-
-    // Extract SDK metadata in background and update session when ready
-    extractSDKMetadataAsync(async (sdkMetadata) => {
-        logger.debug('[start] SDK metadata extracted, updating session:', sdkMetadata);
-        try {
-            // Update session metadata with tools and slash commands
-            session.updateMetadata((currentMetadata) => ({
-                ...currentMetadata,
-                tools: sdkMetadata.tools,
-                slashCommands: sdkMetadata.slashCommands
-            }));
-            logger.debug('[start] Session metadata updated with SDK capabilities');
-        } catch (error) {
-            logger.debug('[start] Failed to update session metadata:', error);
-        }
-    });
 
     // Start HAPI MCP server
     const happyServer = await startHappyServer(session);
@@ -127,9 +115,38 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, {
         filenamePrefix: 'session-hook',
         logLabel: 'generateHookSettings',
-        env: managedProviderSettingsEnv
+        settingsEnv: managedProviderSettingsEnv
     });
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
+
+    const metadataSettingsPath = managedProviderSettingsEnv
+        ? generateProviderSettingsFile(managedProviderSettingsEnv, {
+            filenamePrefix: 'provider-metadata',
+            logLabel: 'generateProviderMetadataSettings'
+        })
+        : undefined;
+
+    // Claude settings `env` has higher precedence than inherited process env.
+    // Metadata gets a provider-only settings file: reusing hookSettingsPath
+    // would fire SessionStart for the throwaway metadata process and could
+    // replace the real session id.
+    void extractSDKMetadataAsync(async (sdkMetadata) => {
+        logger.debug('[start] SDK metadata extracted, updating session:', sdkMetadata);
+        try {
+            session.updateMetadata((currentMetadata) => ({
+                ...currentMetadata,
+                tools: sdkMetadata.tools,
+                slashCommands: sdkMetadata.slashCommands
+            }));
+            logger.debug('[start] Session metadata updated with SDK capabilities');
+        } catch (error) {
+            logger.debug('[start] Failed to update session metadata:', error);
+        }
+    }, { settingsPath: metadataSettingsPath }).finally(() => {
+        if (metadataSettingsPath) {
+            cleanupHookSettingsFile(metadataSettingsPath, 'generateProviderMetadataSettings');
+        }
+    });
 
     // Print log file path
     const logPath = logger.logFilePath;

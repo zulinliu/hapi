@@ -123,11 +123,11 @@ See `src/configuration.ts` for all options.
 Data is stored in `~/.hapi/` (or `$HAPI_HOME`):
 
 - `settings.json` - User settings (machineId, token, onboarding flag). See `src/persistence.ts`.
-- `providers.json` - Namespace-partitioned Claude Code/Codex provider profiles and secrets (mode `0600`).
+- `providers.json` - Namespace-partitioned Claude Code, Codex, and Grok Build provider profiles and secrets (mode `0600`).
 - `runner.state.json` - Runner state (pid, port, version, heartbeat).
 - `logs/` - Log files.
 
-Managed provider defaults apply to new terminal and runner sessions. Use `--hapi-provider <uuid>` or `--hapi-provider system` to override a Claude Code/Codex launch.
+Managed provider defaults apply to new terminal and runner sessions. Use `--hapi-provider <uuid>` or `--hapi-provider system` to override a Claude Code, Codex, or Grok Build launch.
 
 ## Requirements
 

@@ -23,7 +23,11 @@ vi.mock('@/utils/process', () => ({
     isProcessAlive: (pid: number) => testState.alivePids.has(pid)
 }))
 
-import { cleanupHookSettingsFile, generateHookSettingsFile } from './generateHookSettings'
+import {
+    cleanupHookSettingsFile,
+    generateHookSettingsFile,
+    generateProviderSettingsFile
+} from './generateHookSettings'
 
 describe('generateHookSettingsFile', () => {
     beforeEach(() => {
@@ -39,7 +43,7 @@ describe('generateHookSettingsFile', () => {
         const filepath = generateHookSettingsFile(1234, 'hook-token', {
             filenamePrefix: 'session-hook',
             logLabel: 'test',
-            env: {
+            settingsEnv: {
                 ANTHROPIC_API_KEY: 'selected-key',
                 ANTHROPIC_AUTH_TOKEN: '',
                 ANTHROPIC_BASE_URL: 'https://selected.example'
@@ -75,6 +79,17 @@ describe('generateHookSettingsFile', () => {
         expect(second).not.toBe(first)
         expect(readFileSync(first, 'utf8')).toContain('first-token')
         expect(readFileSync(second, 'utf8')).toContain('second-token')
+    })
+
+    it('creates provider-only settings without session hooks', () => {
+        const filepath = generateProviderSettingsFile({ ANTHROPIC_API_KEY: 'selected-key' }, {
+            filenamePrefix: 'provider-metadata',
+            logLabel: 'test'
+        })
+
+        expect(JSON.parse(readFileSync(filepath, 'utf8'))).toEqual({
+            env: { ANTHROPIC_API_KEY: 'selected-key' }
+        })
     })
 
     it('removes only settings files owned by dead sessions', () => {

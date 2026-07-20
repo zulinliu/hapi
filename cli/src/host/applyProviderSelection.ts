@@ -20,10 +20,10 @@ function clearConflictingCredentials(agent: AgentProvider): void {
 
 function clearProviderMetadata(): void {
     delete process.env.HAPI_PROVIDER_PROFILE_ID
-    delete process.env.HAPI_PROVIDER_PROFILE_AGENT
     delete process.env.HAPI_PROVIDER_PROFILE_NAME
     delete process.env.HAPI_PROVIDER_PROFILE_REVISION
     delete process.env.HAPI_PROVIDER_PROFILE_SYSTEM
+    delete process.env.HAPI_PROVIDER_PROFILE_AGENT
     delete process.env.HAPI_CODEX_PROVIDER_ARGS
     delete process.env.HAPI_CODEX_PROVIDER_API_KEY
 }
@@ -36,21 +36,27 @@ export async function applyProviderSelection(
         clearProviderMetadata()
         if (requestedId === null) {
             process.env.HAPI_PROVIDER_PROFILE_SYSTEM = '1'
+            process.env.HAPI_PROVIDER_PROFILE_AGENT = agent
             return null
         }
-    } else if (process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1') {
-        delete process.env.HAPI_PROVIDER_PROFILE_ID
-        delete process.env.HAPI_PROVIDER_PROFILE_AGENT
-        delete process.env.HAPI_PROVIDER_PROFILE_NAME
-        delete process.env.HAPI_PROVIDER_PROFILE_REVISION
-        delete process.env.HAPI_CODEX_PROVIDER_ARGS
-        delete process.env.HAPI_CODEX_PROVIDER_API_KEY
+    } else if (
+        process.env.HAPI_PROVIDER_PROFILE_AGENT === agent
+        && process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1'
+    ) {
+        clearProviderMetadata()
+        process.env.HAPI_PROVIDER_PROFILE_SYSTEM = '1'
+        process.env.HAPI_PROVIDER_PROFILE_AGENT = agent
         return null
-    } else if (process.env.HAPI_PROVIDER_PROFILE_ID) {
-        const inheritedAgent = process.env.HAPI_PROVIDER_PROFILE_AGENT
-        if (!inheritedAgent || inheritedAgent === agent) {
-            return null
-        }
+    } else if (
+        process.env.HAPI_PROVIDER_PROFILE_AGENT === agent
+        && process.env.HAPI_PROVIDER_PROFILE_ID
+    ) {
+        return null
+    } else if (
+        process.env.HAPI_PROVIDER_PROFILE_ID
+        || process.env.HAPI_PROVIDER_PROFILE_SYSTEM === '1'
+        || process.env.HAPI_PROVIDER_PROFILE_AGENT
+    ) {
         clearProviderMetadata()
     }
 
@@ -64,9 +70,9 @@ export async function applyProviderSelection(
     clearConflictingCredentials(agent)
     Object.assign(process.env, launch.env, {
         HAPI_PROVIDER_PROFILE_ID: launch.profile.id,
-        HAPI_PROVIDER_PROFILE_AGENT: agent,
         HAPI_PROVIDER_PROFILE_NAME: launch.profile.name,
-        HAPI_PROVIDER_PROFILE_REVISION: String(launch.profile.revision)
+        HAPI_PROVIDER_PROFILE_REVISION: String(launch.profile.revision),
+        HAPI_PROVIDER_PROFILE_AGENT: agent
     })
     if (agent === 'codex' && launch.args.length > 0) {
         process.env.HAPI_CODEX_PROVIDER_ARGS = JSON.stringify(launch.args)

@@ -24,7 +24,9 @@ function modelsUrl(profile: ResolvedProviderProfile): URL {
 function headersFor(profile: ResolvedProviderProfile): Record<string, string> {
     if (profile.protocol === 'anthropic-messages') {
         return {
-            'x-api-key': profile.apiKey,
+            ...(profile.credentialType === 'auth-token'
+                ? { Authorization: `Bearer ${profile.apiKey}` }
+                : { 'x-api-key': profile.apiKey }),
             'anthropic-version': '2023-06-01'
         }
     }

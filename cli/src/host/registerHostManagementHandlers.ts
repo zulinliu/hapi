@@ -7,30 +7,22 @@ import {
     HostDownloadPrepareRequestSchema,
     HostOperationGetRequestSchema,
     HostOperationRequestSchema,
-    ProviderCreateRequestSchema,
-    ProviderHealthCheckRequestSchema,
-    ProviderListRequestSchema,
-    ProviderSetDefaultRequestSchema,
-    ProviderUpdateRequestSchema,
     type HostOperationGetResponse,
     type HostOperationStartResponse,
     type HostFilePreviewResponse,
     type HostFileWriteResponse,
     type HostDownloadChunkResponse,
-    type HostDownloadPrepareResponse,
-    type ProviderListResponse,
-    type ProviderHealthCheckResponse,
-    type ProviderMutationResponse
+    type HostDownloadPrepareResponse
 } from '@hapi/protocol'
 import { RPC_METHODS } from '@hapi/protocol/rpcMethods'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { FileManager } from './fileManager'
 import { DownloadManager } from './downloadManager'
 import { HostOperationManager } from './hostOperationManager'
-import { ProviderRegistry } from './providerRegistry'
-import { checkProviderHealth } from './providerHealth'
+import type { ProviderRegistry } from './providerRegistry'
 import { RepositoryManager } from './repositoryManager'
 import { WorkspaceScope } from './workspaceScope'
+import { registerProviderHandlers } from './registerProviderHandlers'
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Operation failed'
@@ -42,7 +34,6 @@ export function registerHostManagementHandlers(options: {
     providerRegistry?: ProviderRegistry
 }): void {
     const { rpcHandlerManager } = options
-    const registry = options.providerRegistry ?? new ProviderRegistry()
     const operationManager = new HostOperationManager()
     let workspaceModules: Promise<{ files: FileManager; downloads: DownloadManager; repositories: RepositoryManager }> | null = null
     const getWorkspaceModules = () => {
@@ -171,65 +162,8 @@ export function registerHostManagementHandlers(options: {
         return operation ? { success: true, operation } : { success: false, error: 'Operation not found' }
     })
 
-    rpcHandlerManager.registerHandler<unknown, ProviderListResponse>(RPC_METHODS.ProviderList, async (raw) => {
-        const parsed = ProviderListRequestSchema.safeParse(raw ?? {})
-        if (!parsed.success) return { success: false, error: 'Invalid provider list request' }
-        try {
-            return await registry.list(parsed.data.agent)
-        } catch (error) {
-            return { success: false, error: errorMessage(error) }
-        }
-    })
-
-    rpcHandlerManager.registerHandler<unknown, ProviderMutationResponse>(RPC_METHODS.ProviderCreate, async (raw) => {
-        const parsed = ProviderCreateRequestSchema.safeParse(raw)
-        if (!parsed.success) return { success: false, error: 'Invalid provider profile' }
-        try {
-            return { success: true, profile: await registry.create(parsed.data) }
-        } catch (error) {
-            return { success: false, error: errorMessage(error) }
-        }
-    })
-
-    rpcHandlerManager.registerHandler<unknown, ProviderMutationResponse>(RPC_METHODS.ProviderUpdate, async (raw) => {
-        const parsed = ProviderUpdateRequestSchema.safeParse(raw)
-        if (!parsed.success) return { success: false, error: 'Invalid provider update' }
-        try {
-            return { success: true, profile: await registry.update(parsed.data.id, parsed.data.patch) }
-        } catch (error) {
-            return { success: false, error: errorMessage(error) }
-        }
-    })
-
-    rpcHandlerManager.registerHandler<unknown, ProviderMutationResponse>(RPC_METHODS.ProviderSetDefault, async (raw) => {
-        const parsed = ProviderSetDefaultRequestSchema.safeParse(raw)
-        if (!parsed.success) return { success: false, error: 'Invalid default provider request' }
-        try {
-            await registry.setDefault(parsed.data.agent, parsed.data.id)
-            return { success: true }
-        } catch (error) {
-            return { success: false, error: errorMessage(error) }
-        }
-    })
-
-    rpcHandlerManager.registerHandler<unknown, ProviderHealthCheckResponse>(RPC_METHODS.ProviderHealthCheck, async (raw) => {
-        const parsed = ProviderHealthCheckRequestSchema.safeParse(raw)
-        if (!parsed.success) {
-            return { success: false, status: 'unhealthy', checkedAt: Date.now(), error: 'Invalid provider health request' }
-        }
-        try {
-            const profile = await registry.get(parsed.data.id)
-            if (!profile) {
-                return { success: false, status: 'unhealthy', checkedAt: Date.now(), error: 'Provider profile not found' }
-            }
-            const checked = await checkProviderHealth(profile)
-            const updated = await registry.recordHealthCheck(profile.id, checked)
-            return {
-                ...checked,
-                models: parsed.data.refreshModels ? updated.models : undefined
-            }
-        } catch (error) {
-            return { success: false, status: 'unhealthy', checkedAt: Date.now(), error: errorMessage(error) }
-        }
+    registerProviderHandlers({
+        rpcHandlerManager,
+        providerRegistry: options.providerRegistry
     })
 }

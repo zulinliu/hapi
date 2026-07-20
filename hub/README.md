@@ -117,6 +117,7 @@ See `src/web/routes/` for all endpoints.
 - `GET|POST /api/machines/:id/providers` - List or create machine-local provider profiles.
 - `PATCH /api/machines/:id/providers/:providerId` - Update a provider profile.
 - `POST /api/machines/:id/providers/default` - Select an Agent default provider.
+- `POST /api/machines/:id/providers/:providerId/health` - Check a provider and refresh its model list.
 
 ### Git/Files (`src/web/routes/git.ts`)
 
