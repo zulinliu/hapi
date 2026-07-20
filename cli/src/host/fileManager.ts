@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { cp, lstat, mkdir, open, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, open, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from 'node:path'
 import { MAX_HOST_FILE_UPLOAD_BYTES } from '@hapi/protocol'
 import type {
@@ -300,7 +300,7 @@ export class FileManager {
                     const path = paths[index]
                     context.report(index / operation.paths.length, `Deleting ${basename(path)}`)
                     await assertNoGitMetadataTree(path)
-                    await rm(path, { recursive: true, force: false })
+                    await this.removeNonGitMetadataTree(path)
                     deleted.push(path)
                 }
                 return { paths: deleted }
@@ -382,39 +382,45 @@ export class FileManager {
                     target = await this.scope.resolveDestination(await nextCopyPath(destinationDirectory, basename(source)))
                 } else if (operation.conflict === 'replace') {
                     const mutableTarget = await this.scope.resolveMutableExisting(target)
-                    await rm(mutableTarget, { recursive: true, force: false })
+                    await this.removeNonGitMetadataTree(mutableTarget)
                     replaced.push(target)
                 }
             }
 
             context.report(index / operation.sources.length, `${move ? 'Moving' : 'Copying'} ${basename(source)}`)
             if (move && sourceInfo.isDirectory()) await assertNoGitMetadataTree(source)
-            if (move) {
+            if (move && sourceInfo.isDirectory()) {
+                await this.copyEntry(source, target)
+                try {
+                    await this.removeNonGitMetadataTree(source)
+                } catch (error) {
+                    await this.removeNonGitMetadataTree(target).catch(() => {})
+                    throw error
+                }
+            } else if (move) {
                 try {
                     await rename(source, target)
                 } catch (error) {
                     if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
-                    await cp(source, target, {
-                        recursive: true,
-                        errorOnExist: true,
-                        force: false,
-                        dereference: false,
-                        filter: async (path) => await this.validateCopyEntry(path)
-                    })
-                    await rm(source, { recursive: true, force: false })
+                    await this.copyEntry(source, target)
+                    await this.removeNonGitMetadataTree(source)
                 }
             } else {
-                await cp(source, target, {
-                    recursive: true,
-                    errorOnExist: true,
-                    force: false,
-                    dereference: false,
-                    filter: async (path) => await this.validateCopyEntry(path)
-                })
+                await this.copyEntry(source, target)
             }
             completed.push(target)
         }
         return { paths: completed, replaced, skipped }
+    }
+
+    private async copyEntry(source: string, target: string): Promise<void> {
+        await cp(source, target, {
+            recursive: true,
+            errorOnExist: true,
+            force: false,
+            dereference: false,
+            filter: async (path) => await this.validateCopyEntry(path)
+        })
     }
 
     private async validateCopyEntry(path: string): Promise<boolean> {
@@ -423,5 +429,47 @@ export class FileManager {
         }
         await this.scope.resolveReadableNonGitMetadata(path)
         return true
+    }
+
+    private async removeNonGitMetadataTree(rawPath: string, parentPath?: string): Promise<void> {
+        if (basename(rawPath).toLowerCase() === '.git') {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
+        const path = await this.scope.resolveMutableExisting(rawPath)
+        if (parentPath) await this.assertDirectoryHasNoGitMetadata(parentPath)
+        const info = await lstat(path)
+        if (!info.isDirectory()) {
+            await unlink(path)
+            return
+        }
+
+        const entries = await readdir(path, { withFileTypes: true })
+        if (entries.some((entry) => entry.name.toLowerCase() === '.git')) {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
+        for (const entry of entries) {
+            await this.removeNonGitMetadataTree(join(path, entry.name), path)
+        }
+
+        const currentInfo = await lstat(path)
+        if (!currentInfo.isDirectory() || currentInfo.dev !== info.dev || currentInfo.ino !== info.ino) {
+            throw new Error('Directory changed while being removed')
+        }
+        const remaining = await readdir(path, { withFileTypes: true })
+        if (remaining.some((entry) => entry.name.toLowerCase() === '.git')) {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
+        if (remaining.length > 0) throw new Error('Directory changed while being removed')
+        await rmdir(path)
+    }
+
+    private async assertDirectoryHasNoGitMetadata(rawPath: string): Promise<void> {
+        const path = await this.scope.resolveMutableExisting(rawPath)
+        const info = await lstat(path)
+        if (!info.isDirectory()) throw new Error('Directory changed while being removed')
+        const entries = await readdir(path, { withFileTypes: true })
+        if (entries.some((entry) => entry.name.toLowerCase() === '.git')) {
+            throw new Error('Git metadata must be managed through Git operations')
+        }
     }
 }

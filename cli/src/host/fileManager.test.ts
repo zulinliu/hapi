@@ -195,6 +195,57 @@ describe('FileManager', () => {
         expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
     })
 
+    it('rolls back a directory move when Git metadata appears before source removal', async () => {
+        const { root, scope, manager } = await createManager()
+        const source = join(root, 'source')
+        const destination = join(root, 'destination')
+        const gitConfig = join(source, '.git', 'config')
+        await mkdir(source)
+        await mkdir(destination)
+        await writeFile(join(source, 'file.txt'), 'source')
+        const resolveMutable = scope.resolveMutableExisting.bind(scope)
+        let sourceResolutions = 0
+        vi.spyOn(scope, 'resolveMutableExisting').mockImplementation(async (path) => {
+            const resolved = await resolveMutable(path)
+            if (resolved === source && ++sourceResolutions === 2) {
+                await mkdir(join(source, '.git'))
+                await writeFile(gitConfig, '[core]')
+            }
+            return resolved
+        })
+
+        await expect(manager.execute({
+            kind: 'move',
+            sources: [source],
+            destination,
+            conflict: 'fail'
+        }, context)).rejects.toThrow(/Git metadata/)
+
+        expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+        await expect(stat(join(destination, 'source'))).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+
+    it('preserves Git metadata inserted after recursive deletion starts', async () => {
+        const { root, scope, manager } = await createManager()
+        const source = join(root, 'source')
+        const child = join(source, 'file.txt')
+        const gitConfig = join(source, '.git', 'config')
+        await mkdir(source)
+        await writeFile(child, 'source')
+        const resolveMutable = scope.resolveMutableExisting.bind(scope)
+        vi.spyOn(scope, 'resolveMutableExisting').mockImplementation(async (path) => {
+            const resolved = await resolveMutable(path)
+            if (resolved === child) {
+                await mkdir(join(source, '.git'))
+                await writeFile(gitConfig, '[core]')
+            }
+            return resolved
+        })
+
+        await expect(manager.execute({ kind: 'delete', paths: [source] }, context)).rejects.toThrow(/Git metadata/)
+        expect(await readFile(gitConfig, 'utf8')).toBe('[core]')
+    })
+
     for (const kind of ['copy', 'move', 'delete'] as const) {
         it(`refuses to ${kind} a directory containing nested Git metadata`, async () => {
             const { root, manager } = await createManager()
