@@ -31,66 +31,89 @@ function mimeType(path: string): string {
     return 'application/octet-stream'
 }
 
-type ArchiveEntry =
-    | { type: 'directory'; archivePath: string }
-    | { type: 'file'; path: string; archivePath: string }
+function isSameFile(left: { dev: number; ino: number }, right: { dev: number; ino: number }): boolean {
+    return left.dev === right.dev && left.ino === right.ino
+}
 
-async function collectArchiveEntries(path: string): Promise<{ bytes: number; files: number; entries: ArchiveEntry[] }> {
+async function writeZipArchive(path: string, archivePath: string, scope: WorkspaceScope): Promise<void> {
     let bytes = 0
     let files = 0
     const rootName = basename(path)
-    const entries: ArchiveEntry[] = []
+    const zip = new ZipFile()
+    const output = createWriteStream(archivePath, { flags: 'wx', mode: 0o600 })
+    const outputDone = finished(output)
+    void outputDone.catch(() => {})
+    const archiveError = new Promise<never>((_resolve, reject) => {
+        zip.once('error', reject)
+    })
+    void archiveError.catch(() => {})
+    zip.outputStream.pipe(output)
+
+    const addFile = async (filePath: string, entryPath: string): Promise<void> => {
+        const handle = await open(filePath, 'r')
+        try {
+            const openedInfo = await handle.stat()
+            const currentPath = await scope.resolveReadableNonGitMetadata(filePath)
+            const [pathInfo, currentInfo] = await Promise.all([lstat(filePath), stat(currentPath)])
+            if (!openedInfo.isFile() || !pathInfo.isFile()
+                || !isSameFile(openedInfo, pathInfo) || !isSameFile(openedInfo, currentInfo)) {
+                throw new Error('Directory contents changed while being archived')
+            }
+
+            files += 1
+            bytes += openedInfo.size
+            if (files > MAX_ARCHIVE_FILES) throw new Error(`Directory contains more than ${MAX_ARCHIVE_FILES} files`)
+            if (bytes > MAX_DOWNLOAD_BYTES) throw new Error(`Download exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
+
+            const stream = handle.createReadStream({ autoClose: false })
+            zip.addReadStream(stream, entryPath, {
+                size: openedInfo.size,
+                mtime: openedInfo.mtime,
+                mode: openedInfo.mode
+            })
+            await Promise.race([finished(stream), archiveError])
+        } finally {
+            await handle.close()
+        }
+    }
+
     const visit = async (current: string): Promise<void> => {
+        const directory = await scope.resolveReadableNonGitMetadata(current)
+        const [pathInfo, directoryInfo] = await Promise.all([lstat(current), stat(directory)])
+        if (!pathInfo.isDirectory() || !directoryInfo.isDirectory() || !isSameFile(pathInfo, directoryInfo)) {
+            throw new Error('Directory contents changed while being archived')
+        }
         const relativePath = relative(path, current).replace(/\\/g, '/')
-        entries.push({
-            type: 'directory',
-            archivePath: relativePath ? `${rootName}/${relativePath}` : rootName
-        })
-        const directoryEntries = await readdir(current, { withFileTypes: true })
+        zip.addEmptyDirectory(relativePath ? `${rootName}/${relativePath}` : rootName)
+        const directoryEntries = await readdir(directory, { withFileTypes: true })
+        const currentDirectory = await scope.resolveReadableNonGitMetadata(current)
+        const currentDirectoryInfo = await stat(currentDirectory)
+        if (!isSameFile(directoryInfo, currentDirectoryInfo)) {
+            throw new Error('Directory contents changed while being archived')
+        }
         for (const entry of directoryEntries) {
             if (entry.name.toLowerCase() === '.git') continue
-            const child = join(current, entry.name)
+            const child = join(directory, entry.name)
             const info = await lstat(child)
-            if (entry.isDirectory()) {
+            if (info.isDirectory()) {
                 await visit(child)
                 continue
             }
-            if (!entry.isFile()) throw new Error('Directories containing symlinks or special files cannot be downloaded')
-            files += 1
-            bytes += info.size
-            if (files > MAX_ARCHIVE_FILES) throw new Error(`Directory contains more than ${MAX_ARCHIVE_FILES} files`)
-            if (bytes > MAX_DOWNLOAD_BYTES) throw new Error(`Download exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
-            entries.push({
-                type: 'file',
-                path: child,
-                archivePath: `${rootName}/${relative(path, child).replace(/\\/g, '/')}`
-            })
+            if (!info.isFile()) throw new Error('Directories containing symlinks or special files cannot be downloaded')
+            await addFile(child, `${rootName}/${relative(path, child).replace(/\\/g, '/')}`)
         }
     }
-    await visit(path)
-    return { bytes, files, entries }
-}
 
-async function writeZipArchive(entries: ArchiveEntry[], archivePath: string): Promise<void> {
-    const zip = new ZipFile()
-    const output = createWriteStream(archivePath, { flags: 'wx', mode: 0o600 })
-    const archiveError = new Promise<never>((_resolve, reject) => {
-        zip.once('error', (error) => {
-            output.destroy(error)
-            reject(error)
-        })
-    })
-
-    for (const entry of entries) {
-        if (entry.type === 'directory') {
-            zip.addEmptyDirectory(entry.archivePath)
-        } else {
-            zip.addFile(entry.path, entry.archivePath)
-        }
+    try {
+        await visit(path)
+        zip.end()
+        await Promise.race([outputDone, archiveError])
+    } catch (error) {
+        zip.outputStream.unpipe(output)
+        output.destroy()
+        await outputDone.catch(() => {})
+        throw error
     }
-    zip.outputStream.pipe(output)
-    zip.end()
-    await Promise.race([finished(output), archiveError])
 }
 
 export class DownloadManager {
@@ -125,14 +148,13 @@ export class DownloadManager {
         if (!info.isDirectory()) throw new Error('Only files and directories can be downloaded')
         if (this.archiving) throw new Error('Another directory archive is already being prepared')
         this.archiving = true
+        let tempDirectory: string | undefined
         try {
-            const { entries } = await collectArchiveEntries(path)
-            const tempDirectory = await mkdtemp(join(tmpdir(), 'hapi-download-'))
+            tempDirectory = await mkdtemp(join(tmpdir(), 'hapi-download-'))
             const archivePath = join(tempDirectory, `${basename(path)}.zip`)
-            await writeZipArchive(entries, archivePath)
+            await writeZipArchive(path, archivePath, this.scope)
             const archiveInfo = await stat(archivePath)
             if (archiveInfo.size > MAX_DOWNLOAD_BYTES) {
-                await rm(tempDirectory, { recursive: true, force: true })
                 throw new Error(`Archive exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
             }
             return this.register({
@@ -142,6 +164,9 @@ export class DownloadManager {
                 size: archiveInfo.size,
                 archive: true
             }, archivePath, tempDirectory)
+        } catch (error) {
+            if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true })
+            throw error
         } finally {
             this.archiving = false
         }

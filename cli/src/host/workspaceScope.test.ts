@@ -54,5 +54,6 @@ describe('WorkspaceScope', () => {
         const scope = await WorkspaceScope.create([root])
 
         await expect(scope.resolveMutableExisting(join(root, '.git', 'config'))).rejects.toThrow(/Git metadata/)
+        await expect(scope.resolveWritableExisting(join(root, '.git', 'config'))).rejects.toThrow(/Git metadata/)
     })
 })

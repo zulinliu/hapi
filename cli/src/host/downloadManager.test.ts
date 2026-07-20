@@ -1,13 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { rmSync, symlinkSync, truncateSync } from 'node:fs'
 import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ZipFile } from 'yazl'
 import { DownloadManager } from './downloadManager'
 import { WorkspaceScope } from './workspaceScope'
 
 const created: string[] = []
 
 afterEach(async () => {
+    vi.restoreAllMocks()
     await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -85,5 +88,69 @@ describe('DownloadManager', () => {
         expect(archive.includes(Buffer.from('project/.git/config'))).toBe(false)
         await expect(manager.prepare(gitDirectory)).rejects.toThrow(/Git metadata/)
         await manager.release(download.id)
+    })
+
+    it.skipIf(process.platform === 'win32')('keeps directory archives bound to validated files', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'hapi-download-dir-retarget-'))
+        const outside = await mkdtemp(join(tmpdir(), 'hapi-download-dir-retarget-outside-'))
+        created.push(root, outside)
+        const folder = join(root, 'project')
+        const file = join(folder, 'notes.txt')
+        const secret = join(outside, 'secret.txt')
+        const workspaceContent = 'validated workspace content'
+        const outsideContent = 'outside secret content'
+        await mkdir(folder)
+        await writeFile(file, workspaceContent)
+        await writeFile(secret, outsideContent)
+
+        let retargeted = false
+        const retarget = (): void => {
+            if (!retargeted) {
+                rmSync(file)
+                symlinkSync(secret, file)
+                retargeted = true
+            }
+        }
+        const originalAddFile = ZipFile.prototype.addFile
+        vi.spyOn(ZipFile.prototype, 'addFile').mockImplementation(function (this: ZipFile, realPath, metadataPath, options) {
+            retarget()
+            return originalAddFile.call(this, realPath, metadataPath, { ...options, compress: false })
+        })
+        const originalAddReadStream = ZipFile.prototype.addReadStream
+        vi.spyOn(ZipFile.prototype, 'addReadStream').mockImplementation(function (this: ZipFile, stream, metadataPath, options) {
+            retarget()
+            return originalAddReadStream.call(this, stream, metadataPath, { ...options, compress: false })
+        })
+
+        const manager = new DownloadManager(await WorkspaceScope.create([root]))
+        const download = await manager.prepare(folder)
+        const chunk = await manager.readChunk(download.id, 0)
+        const archive = Buffer.from(chunk.base64!, 'base64')
+
+        expect(retargeted).toBe(true)
+        expect(archive.includes(Buffer.from(workspaceContent))).toBe(true)
+        expect(archive.includes(Buffer.from(outsideContent))).toBe(false)
+        await manager.release(download.id)
+    })
+
+    it('fails when a directory file changes size while being archived', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'hapi-download-dir-resize-'))
+        created.push(root)
+        const folder = join(root, 'project')
+        const file = join(folder, 'notes.txt')
+        await mkdir(folder)
+        await writeFile(file, 'content before resize')
+
+        const originalAddReadStream = ZipFile.prototype.addReadStream
+        let truncated = false
+        vi.spyOn(ZipFile.prototype, 'addReadStream').mockImplementation(function (this: ZipFile, stream, metadataPath, options) {
+            truncateSync(file, 0)
+            truncated = true
+            return originalAddReadStream.call(this, stream, metadataPath, options)
+        })
+
+        const manager = new DownloadManager(await WorkspaceScope.create([root]))
+        await expect(manager.prepare(folder)).rejects.toThrow(/unexpected number of bytes/)
+        expect(truncated).toBe(true)
     })
 })

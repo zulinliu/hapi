@@ -104,7 +104,7 @@ export class WorkspaceScope {
     }
 
     async resolveWritableExisting(rawPath: string): Promise<string> {
-        const canonical = await this.resolveReadable(rawPath)
+        const canonical = await this.resolveReadableNonGitMetadata(rawPath)
         this.assertMutable(canonical)
         return canonical
     }
