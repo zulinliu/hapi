@@ -45,6 +45,16 @@ describe('workspace management schemas', () => {
         }
     })
 
+    it('rejects invalid Git branch ref names', () => {
+        for (const name of ['feature//workspace', '.hidden/name', 'feature/name.lock', 'feature/@{bad', '@']) {
+            expect(GitOperationSchema.safeParse({
+                kind: 'switch-branch',
+                repository: '/workspace/repository',
+                name
+            }).success).toBe(false)
+        }
+    })
+
     it('rejects create-file content above the text file limit', () => {
         expect(FileOperationSchema.safeParse({
             kind: 'create-file',

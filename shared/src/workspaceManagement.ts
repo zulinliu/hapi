@@ -231,8 +231,17 @@ const GitRemoteNameSchema = z.string()
         (value) => !value.startsWith('-') && value !== '.' && value !== '..',
         'Invalid remote name'
     )
+const GitBranchForbiddenCharacters = new Set(['~', '^', ':', '?', '*', '[', '\\'])
 const GitBranchNameSchema = z.string().trim().min(1).max(255).refine(
-    (value) => !value.startsWith('-') && !/[\s~^:?*\\[\\]/.test(value) && !value.includes('..') && !value.endsWith('.'),
+    (value) => {
+        if (value.startsWith('-') || value === '@' || value.includes('@{')) return false
+        if (value.includes('..') || value.includes('//') || value.endsWith('.') || value.endsWith('/')) return false
+        if ([...value].some((character) => {
+            const codePoint = character.codePointAt(0) ?? 0
+            return codePoint <= 0x20 || codePoint === 0x7f || GitBranchForbiddenCharacters.has(character)
+        })) return false
+        return value.split('/').every((part) => part && !part.startsWith('.') && !part.endsWith('.lock'))
+    },
     'Invalid branch name'
 )
 export const GitOperationSchema = z.discriminatedUnion('kind', [
