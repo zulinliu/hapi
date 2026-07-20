@@ -151,6 +151,41 @@ describe('FileManager', () => {
         await expect(stat(join(destination, 'first.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
     })
 
+    it('rejects overlapping move sources before changing the filesystem', async () => {
+        const { root, manager } = await createManager()
+        const parent = join(root, 'parent')
+        const child = join(parent, '..child.txt')
+        const destination = join(root, 'destination')
+        await mkdir(parent)
+        await writeFile(child, 'child')
+
+        await expect(manager.execute({
+            kind: 'move',
+            sources: [parent, child],
+            destination,
+            conflict: 'fail',
+            createDestination: true
+        }, context)).rejects.toThrow(/overlap/)
+
+        expect(await readFile(child, 'utf8')).toBe('child')
+        await expect(stat(destination)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+
+    it('rejects overlapping delete paths before changing the filesystem', async () => {
+        const { root, manager } = await createManager()
+        const parent = join(root, 'parent')
+        const child = join(parent, 'child.txt')
+        await mkdir(parent)
+        await writeFile(child, 'child')
+
+        await expect(manager.execute({
+            kind: 'delete',
+            paths: [parent, child]
+        }, context)).rejects.toThrow(/overlap/)
+
+        expect(await readFile(child, 'utf8')).toBe('child')
+    })
+
     it('creates a requested destination and resolves collisions by copy or skip', async () => {
         const { root, manager } = await createManager()
         const source = join(root, 'source.txt')

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { cp, lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, isAbsolute, join, relative } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from 'node:path'
 import { MAX_HOST_FILE_UPLOAD_BYTES } from '@hapi/protocol'
 import type {
     FileOperation,
@@ -41,7 +41,18 @@ async function assertNoGitMetadataTree(path: string): Promise<void> {
 
 function isDescendant(candidate: string, parent: string): boolean {
     const rel = relative(parent, candidate)
-    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+    return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
+}
+
+function assertNoOverlappingPaths(paths: string[]): void {
+    for (let left = 0; left < paths.length; left += 1) {
+        for (let right = left + 1; right < paths.length; right += 1) {
+            const relativePath = relative(paths[left], paths[right])
+            if (relativePath === '' || isDescendant(paths[left], paths[right]) || isDescendant(paths[right], paths[left])) {
+                throw new Error('Batch operation paths must not overlap')
+            }
+        }
+    }
 }
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024
@@ -269,6 +280,7 @@ export class FileManager {
                 return await this.copyOrMove(operation, context, true)
             case 'delete': {
                 const paths = await Promise.all(operation.paths.map(async (path) => await this.scope.resolveMutableExisting(path)))
+                assertNoOverlappingPaths(paths)
                 await Promise.all(paths.map(async (path) => await assertNoGitMetadataTree(path)))
                 const deleted: string[] = []
                 for (let index = 0; index < paths.length; index += 1) {
@@ -289,15 +301,16 @@ export class FileManager {
         move: boolean
     ): Promise<Record<string, unknown>> {
         let destinationDirectory: string
+        let createDestination = false
         try {
             destinationDirectory = await this.scope.resolveReadable(operation.destination)
+            const destinationStat = await stat(destinationDirectory)
+            if (!destinationStat.isDirectory()) throw new Error('Destination is not a directory')
         } catch (error) {
             if (!operation.createDestination || !(error instanceof Error && error.message === 'Path does not exist')) throw error
             destinationDirectory = await this.scope.resolveDestination(operation.destination)
-            await mkdir(destinationDirectory, { recursive: true })
+            createDestination = true
         }
-        const destinationStat = await stat(destinationDirectory)
-        if (!destinationStat.isDirectory()) throw new Error('Destination is not a directory')
 
         const plans = await Promise.all(operation.sources.map(async (rawSource) => {
             const source = await this.scope.resolveMutableExisting(rawSource)
@@ -308,6 +321,7 @@ export class FileManager {
             }
             return { source, target, sourceInfo }
         }))
+        assertNoOverlappingPaths(plans.map((plan) => plan.source))
         await Promise.all(plans.map(async (plan) => await assertNoGitMetadataTree(plan.source)))
         const duplicateTargets = plans.filter((plan, index) => plans.findIndex((candidate) => candidate.target === plan.target) !== index)
         if (duplicateTargets.length > 0) throw new Error(`Multiple sources have the same destination name: ${basename(duplicateTargets[0].target)}`)
@@ -324,6 +338,7 @@ export class FileManager {
         if (operation.conflict === 'fail' && conflicts.length > 0) {
             throw new Error(`Destination already exists: ${conflicts.join(', ')}`)
         }
+        if (createDestination) await mkdir(destinationDirectory, { recursive: true })
 
         const completed: string[] = []
         const replaced: string[] = []

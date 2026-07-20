@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FileOperationSchema, GitOperationSchema, HostFileUploadRequestSchema } from './workspaceManagement'
+import {
+    FileOperationSchema,
+    GitOperationSchema,
+    HostFileUploadRequestSchema,
+    HostFileWriteRequestSchema,
+    MAX_HOST_FILE_TEXT_BYTES
+} from './workspaceManagement'
 
 describe('workspace management schemas', () => {
     it('accepts copy conflict policies and Git branch lifecycle operations', () => {
@@ -30,6 +36,20 @@ describe('workspace management schemas', () => {
             kind: 'create-file',
             path: '/workspace/large.txt',
             content: 'x'.repeat(2 * 1024 * 1024 + 1)
+        }).success).toBe(false)
+    })
+
+    it('applies the text file limit to UTF-8 bytes', () => {
+        const content = '界'.repeat(Math.floor(MAX_HOST_FILE_TEXT_BYTES / 3) + 1)
+        expect(new TextEncoder().encode(content).byteLength).toBeGreaterThan(MAX_HOST_FILE_TEXT_BYTES)
+        expect(FileOperationSchema.safeParse({
+            kind: 'create-file',
+            path: '/workspace/large.txt',
+            content
+        }).success).toBe(false)
+        expect(HostFileWriteRequestSchema.safeParse({
+            path: '/workspace/large.txt',
+            content
         }).success).toBe(false)
     })
 

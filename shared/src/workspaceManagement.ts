@@ -51,10 +51,15 @@ export const HostFilePreviewResponseSchema = z.object({
 export type HostFilePreviewResponse = z.infer<typeof HostFilePreviewResponseSchema>
 
 export const MAX_HOST_FILE_TEXT_BYTES = 2 * 1024 * 1024
+const textEncoder = new TextEncoder()
+const HostFileTextContentSchema = z.string().max(MAX_HOST_FILE_TEXT_BYTES).refine(
+    (value) => textEncoder.encode(value).byteLength <= MAX_HOST_FILE_TEXT_BYTES,
+    `File content exceeds ${MAX_HOST_FILE_TEXT_BYTES} bytes`
+)
 
 export const HostFileWriteRequestSchema = z.object({
     path: z.string().trim().min(1),
-    content: z.string().max(MAX_HOST_FILE_TEXT_BYTES),
+    content: HostFileTextContentSchema,
     expectedModified: z.number().int().nonnegative().optional(),
     expectedSize: z.number().int().nonnegative().optional()
 })
@@ -128,7 +133,7 @@ export const FileOperationSchema = z.discriminatedUnion('kind', [
     z.object({
         kind: z.literal('create-file'),
         path: z.string().trim().min(1),
-        content: z.string().max(MAX_HOST_FILE_TEXT_BYTES).optional()
+        content: HostFileTextContentSchema.optional()
     }),
     z.object({
         kind: z.literal('create-directory'),

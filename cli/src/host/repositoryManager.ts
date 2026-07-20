@@ -160,6 +160,7 @@ export class RepositoryManager {
     private capabilitiesPromise: Promise<GitCapabilities> | null = null
     private capabilitiesExpiresAt = 0
     private readonly preferencePath: string
+    private preferenceUpdate = Promise.resolve()
 
     constructor(scope: WorkspaceScope, options?: { preferencePath?: string }) {
         this.scope = scope
@@ -347,12 +348,16 @@ export class RepositoryManager {
     }
 
     private async setCommitTemplate(repository: string, template: GitCommitTemplate): Promise<void> {
-        const preferences = await this.readPreferences()
-        preferences.repositories[repository] = template
-        await mkdir(dirname(this.preferencePath), { recursive: true, mode: 0o700 })
-        const tempPath = `${this.preferencePath}.${process.pid}.${randomUUID()}.tmp`
-        await writeFile(tempPath, JSON.stringify(preferences, null, 2), { encoding: 'utf8', mode: 0o600 })
-        await rename(tempPath, this.preferencePath)
+        const update = this.preferenceUpdate.then(async () => {
+            const preferences = await this.readPreferences()
+            preferences.repositories[repository] = template
+            await mkdir(dirname(this.preferencePath), { recursive: true, mode: 0o700 })
+            const tempPath = `${this.preferencePath}.${process.pid}.${randomUUID()}.tmp`
+            await writeFile(tempPath, JSON.stringify(preferences, null, 2), { encoding: 'utf8', mode: 0o600 })
+            await rename(tempPath, this.preferencePath)
+        })
+        this.preferenceUpdate = update.catch(() => {})
+        await update
     }
 
     private async readPreferences(): Promise<GitPreferenceDocument> {

@@ -1,5 +1,5 @@
 import { lstat, realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export class WorkspaceScopeError extends Error {
     constructor(message: string) {
@@ -16,7 +16,7 @@ function isWithin(path: string, root: string): boolean {
     const normalizedPath = normalizeForComparison(path)
     const normalizedRoot = normalizeForComparison(root)
     const rel = relative(normalizedRoot, normalizedPath)
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
 async function canonicalizeMissingPath(path: string): Promise<string> {
