@@ -76,6 +76,14 @@ export class WorkspaceScope {
         return canonical
     }
 
+    async resolveReadableNonGitMetadata(rawPath: string): Promise<string> {
+        const absolute = this.toAbsolute(rawPath)
+        this.assertNoGitMetadataSegment(absolute)
+        const canonical = await this.resolveReadable(absolute)
+        this.assertNoGitMetadataSegment(canonical)
+        return canonical
+    }
+
     async resolveMutableExisting(rawPath: string): Promise<string> {
         const absolute = this.toAbsolute(rawPath)
         this.assertNoGitMetadataSegment(absolute)

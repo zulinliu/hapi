@@ -111,7 +111,7 @@ export class FileManager {
     constructor(private readonly scope: WorkspaceScope) {}
 
     async list(path: string, includeHidden = false): Promise<HostListDirectoryResponse> {
-        const directory = await this.scope.resolveReadable(path)
+        const directory = await this.scope.resolveReadableNonGitMetadata(path)
         const directoryStat = await stat(directory)
         if (!directoryStat.isDirectory()) {
             throw new Error('Path is not a directory')
@@ -119,7 +119,7 @@ export class FileManager {
 
         const entries = await readdir(directory, { withFileTypes: true })
         const result = await Promise.all(entries
-            .filter((entry) => includeHidden || !entry.name.startsWith('.'))
+            .filter((entry) => entry.name.toLowerCase() !== '.git' && (includeHidden || !entry.name.startsWith('.')))
             .map(async (entry): Promise<HostFileEntry> => {
                 const fullPath = join(directory, entry.name)
                 const info = await lstat(fullPath)
@@ -158,7 +158,7 @@ export class FileManager {
     }
 
     async readPreview(rawPath: string): Promise<HostFilePreviewResponse> {
-        const path = await this.scope.resolveReadable(rawPath)
+        const path = await this.scope.resolveReadableNonGitMetadata(rawPath)
         const info = await stat(path)
         if (!info.isFile()) throw new Error('Path is not a file')
         const base = {

@@ -91,6 +91,18 @@ describe('FileManager', () => {
         await expect(manager.execute({ kind: 'delete', paths: [join(root, '.git')] }, context)).rejects.toThrow(/Git metadata/)
     })
 
+    it('hides and rejects readable Git metadata', async () => {
+        const { root, manager } = await createManager()
+        const gitDirectory = join(root, '.git')
+        const gitConfig = join(gitDirectory, 'config')
+        await mkdir(gitDirectory)
+        await writeFile(gitConfig, '[remote "origin"]')
+
+        expect((await manager.list(root, true)).entries?.map((entry) => entry.name)).not.toContain('.git')
+        await expect(manager.list(gitDirectory, true)).rejects.toThrow(/Git metadata/)
+        await expect(manager.readPreview(gitConfig)).rejects.toThrow(/Git metadata/)
+    })
+
     for (const kind of ['copy', 'move', 'delete'] as const) {
         it(`refuses to ${kind} a directory containing nested Git metadata`, async () => {
             const { root, manager } = await createManager()

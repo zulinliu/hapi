@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdtemp, open, readdir, rm, lstat, stat } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join, relative } from 'node:path'
 import { finished } from 'node:stream/promises'
@@ -16,6 +17,7 @@ const DOWNLOAD_TTL_MS = 15 * 60 * 1000
 type PreparedDownload = HostDownloadDescriptor & {
     path: string
     tempDirectory?: string
+    handle?: FileHandle
     timer: ReturnType<typeof setTimeout>
 }
 
@@ -32,12 +34,6 @@ function mimeType(path: string): string {
 type ArchiveEntry =
     | { type: 'directory'; archivePath: string }
     | { type: 'file'; path: string; archivePath: string }
-
-function assertNotGitMetadataPath(path: string): void {
-    if (path.split(/[\\/]+/).some((segment) => segment.toLowerCase() === '.git')) {
-        throw new Error('Git metadata must be managed through Git operations')
-    }
-}
 
 async function collectArchiveEntries(path: string): Promise<{ bytes: number; files: number; entries: ArchiveEntry[] }> {
     let bytes = 0
@@ -104,14 +100,27 @@ export class DownloadManager {
     constructor(private readonly scope: WorkspaceScope) {}
 
     async prepare(rawPath: string): Promise<HostDownloadDescriptor> {
-        assertNotGitMetadataPath(rawPath)
-        const path = await this.scope.resolveReadable(rawPath)
-        assertNotGitMetadataPath(path)
+        const path = await this.scope.resolveReadableNonGitMetadata(rawPath)
         const info = await stat(path)
         const id = randomUUID()
         if (info.isFile()) {
             if (info.size > MAX_DOWNLOAD_BYTES) throw new Error(`Download exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
-            return this.register({ id, name: basename(path), mimeType: mimeType(path), size: info.size, archive: false }, path)
+            const handle = await open(path, 'r')
+            try {
+                const [openedInfo, currentPath] = await Promise.all([
+                    handle.stat(),
+                    this.scope.resolveReadableNonGitMetadata(path)
+                ])
+                const currentInfo = await stat(currentPath)
+                if (!openedInfo.isFile() || openedInfo.dev !== currentInfo.dev || openedInfo.ino !== currentInfo.ino) {
+                    throw new Error('Download changed while being prepared')
+                }
+                if (openedInfo.size > MAX_DOWNLOAD_BYTES) throw new Error(`Download exceeds the ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MiB limit`)
+                return this.register({ id, name: basename(path), mimeType: mimeType(path), size: openedInfo.size, archive: false }, path, undefined, handle)
+            } catch (error) {
+                await handle.close()
+                throw error
+            }
         }
         if (!info.isDirectory()) throw new Error('Only files and directories can be downloaded')
         if (this.archiving) throw new Error('Another directory archive is already being prepared')
@@ -144,8 +153,14 @@ export class DownloadManager {
         if (offset > download.size) return { success: false, error: 'Invalid download offset' }
         const remaining = download.size - offset
         if (remaining === 0) return { success: true, base64: '', nextOffset: offset, done: true }
-        const handle = await open(download.path, 'r')
+        const handle = download.handle ?? await open(download.path, 'r')
         try {
+            if (download.handle) {
+                const currentInfo = await handle.stat()
+                if (!currentInfo.isFile() || currentInfo.size !== download.size) {
+                    return { success: false, error: 'Download changed while being read' }
+                }
+            }
             const bytes = Math.min(CHUNK_BYTES, remaining)
             const buffer = Buffer.allocUnsafe(bytes)
             const { bytesRead } = await handle.read(buffer, 0, bytes, offset)
@@ -160,7 +175,7 @@ export class DownloadManager {
                 done: nextOffset >= download.size
             }
         } finally {
-            await handle.close()
+            if (!download.handle) await handle.close()
         }
     }
 
@@ -169,13 +184,19 @@ export class DownloadManager {
         if (!download) return
         this.downloads.delete(id)
         clearTimeout(download.timer)
+        if (download.handle) await download.handle.close()
         if (download.tempDirectory) await rm(download.tempDirectory, { recursive: true, force: true })
     }
 
-    private register(descriptor: Omit<HostDownloadDescriptor, 'id'> & { id: string }, path: string, tempDirectory?: string): HostDownloadDescriptor {
+    private register(
+        descriptor: Omit<HostDownloadDescriptor, 'id'> & { id: string },
+        path: string,
+        tempDirectory?: string,
+        handle?: FileHandle
+    ): HostDownloadDescriptor {
         const timer = setTimeout(() => { void this.release(descriptor.id) }, DOWNLOAD_TTL_MS)
         timer.unref()
-        this.downloads.set(descriptor.id, { ...descriptor, path, tempDirectory, timer })
+        this.downloads.set(descriptor.id, { ...descriptor, path, tempDirectory, handle, timer })
         return descriptor
     }
 }
