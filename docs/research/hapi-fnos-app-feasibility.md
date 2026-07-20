@@ -93,16 +93,16 @@
 
 | 编号 | 仓库来源 | 用途 |
 | --- | --- | --- |
-| H1 | [Web README](../../web/README.md) / [Hub README](../../hub/README.md) / [Pages 构建工作流](../../.github/workflows/webapp.yml) | 独立静态托管、Hub 选择器、CORS、HTTPS 与部署配置。 |
-| H2 | [useServerUrl.ts](../../web/src/hooks/useServerUrl.ts) / [useAuthSource.ts](../../web/src/hooks/useAuthSource.ts) / [LoginPrompt.tsx](../../web/src/components/LoginPrompt.tsx) / [client.ts](../../web/src/api/client.ts) | Hub URL 优先级、origin 归一化、长期 token 存储与登录请求、REST URL。 |
-| H3 | [useSSE.ts](../../web/src/hooks/useSSE.ts) / [useTerminalSocket.ts](../../web/src/hooks/useTerminalSocket.ts) | SSE、心跳重连、Socket.IO 路径和终端 namespace。 |
-| H4 | [vite.config.ts](../../web/vite.config.ts) / [router.tsx](../../web/src/router.tsx) / [sw.ts](../../web/src/sw.ts) | Vite base、客户端路由、PWA scope、缓存与根路径假设。 |
-| H5 | [Hub HTTP server](../../hub/src/web/server.ts) / [Socket.IO server](../../hub/src/socket/server.ts) | CORS、上传体积、静态托管、Socket.IO Origin 检查和 WebSocket 路由。 |
-| H6 | [serverSettings.ts](../../hub/src/config/serverSettings.ts) / [auth.ts](../../hub/src/web/routes/auth.ts) / [auth middleware](../../hub/src/web/middleware/auth.ts) | Hub 监听、公开 URL、CORS、CLI token 换 JWT 与 SSE 查询参数鉴权。 |
-| H7 | [voice.ts](../../hub/src/web/routes/voice.ts) / [GeminiLiveVoiceSession.tsx](../../web/src/realtime/GeminiLiveVoiceSession.tsx) / [QwenVoiceSession.tsx](../../web/src/realtime/QwenVoiceSession.tsx) / [RealtimeVoiceSession.tsx](../../web/src/realtime/RealtimeVoiceSession.tsx) / [pushNotificationChannel.ts](../../hub/src/push/pushNotificationChannel.ts) / [serverchan/channel.ts](../../hub/src/serverchan/channel.ts) | 语音链路、WebSocket 回连地址、Web Push 和 ServerChan 通知深链。 |
-| H8 | [协议版本](../../shared/src/version.ts) / [Web About](../../web/src/routes/settings/about.tsx) / [CLI 错误提示](../../cli/src/commands/claude.ts) | Web/Hub 协议版本与当前缺少主动兼容检查。 |
-| H9 | [AGPL-3.0-only LICENSE](../../LICENSE) | 分发对象码、对应源代码和网络交互版本的许可证义务。 |
-| H10 | [RPC Gateway](../../hub/src/sync/rpcGateway.ts) / [CLI configuration](../../cli/src/configuration.ts) | 120-300 秒 RPC 超时、CLI 默认 Hub 地址和 `HAPI_API_URL`。 |
+| H1 | [Web README](https://github.com/tiann/hapi/blob/main/web/README.md) / [Hub README](https://github.com/tiann/hapi/blob/main/hub/README.md) / [Pages 构建工作流](https://github.com/tiann/hapi/blob/main/.github/workflows/webapp.yml) | 独立静态托管、Hub 选择器、CORS、HTTPS 与部署配置。 |
+| H2 | [useServerUrl.ts](https://github.com/tiann/hapi/blob/main/web/src/hooks/useServerUrl.ts) / [useAuthSource.ts](https://github.com/tiann/hapi/blob/main/web/src/hooks/useAuthSource.ts) / [LoginPrompt.tsx](https://github.com/tiann/hapi/blob/main/web/src/components/LoginPrompt.tsx) / [client.ts](https://github.com/tiann/hapi/blob/main/web/src/api/client.ts) | Hub URL 优先级、origin 归一化、长期 token 存储与登录请求、REST URL。 |
+| H3 | [useSSE.ts](https://github.com/tiann/hapi/blob/main/web/src/hooks/useSSE.ts) / [useTerminalSocket.ts](https://github.com/tiann/hapi/blob/main/web/src/hooks/useTerminalSocket.ts) | SSE、心跳重连、Socket.IO 路径和终端 namespace。 |
+| H4 | [vite.config.ts](https://github.com/tiann/hapi/blob/main/web/vite.config.ts) / [router.tsx](https://github.com/tiann/hapi/blob/main/web/src/router.tsx) / [sw.ts](https://github.com/tiann/hapi/blob/main/web/src/sw.ts) | Vite base、客户端路由、PWA scope、缓存与根路径假设。 |
+| H5 | [Hub HTTP server](https://github.com/tiann/hapi/blob/main/hub/src/web/server.ts) / [Socket.IO server](https://github.com/tiann/hapi/blob/main/hub/src/socket/server.ts) | CORS、上传体积、静态托管、Socket.IO Origin 检查和 WebSocket 路由。 |
+| H6 | [serverSettings.ts](https://github.com/tiann/hapi/blob/main/hub/src/config/serverSettings.ts) / [auth.ts](https://github.com/tiann/hapi/blob/main/hub/src/web/routes/auth.ts) / [auth middleware](https://github.com/tiann/hapi/blob/main/hub/src/web/middleware/auth.ts) | Hub 监听、公开 URL、CORS、CLI token 换 JWT 与 SSE 查询参数鉴权。 |
+| H7 | [voice.ts](https://github.com/tiann/hapi/blob/main/hub/src/web/routes/voice.ts) / [GeminiLiveVoiceSession.tsx](https://github.com/tiann/hapi/blob/main/web/src/realtime/GeminiLiveVoiceSession.tsx) / [QwenVoiceSession.tsx](https://github.com/tiann/hapi/blob/main/web/src/realtime/QwenVoiceSession.tsx) / [RealtimeVoiceSession.tsx](https://github.com/tiann/hapi/blob/main/web/src/realtime/RealtimeVoiceSession.tsx) / [pushNotificationChannel.ts](https://github.com/tiann/hapi/blob/main/hub/src/push/pushNotificationChannel.ts) / [serverchan/channel.ts](https://github.com/tiann/hapi/blob/main/hub/src/serverchan/channel.ts) | 语音链路、WebSocket 回连地址、Web Push 和 ServerChan 通知深链。 |
+| H8 | [协议版本](https://github.com/tiann/hapi/blob/main/shared/src/version.ts) / [Web About](https://github.com/tiann/hapi/blob/main/web/src/routes/settings/about.tsx) / [CLI 错误提示](https://github.com/tiann/hapi/blob/main/cli/src/commands/claude.ts) | Web/Hub 协议版本与当前缺少主动兼容检查。 |
+| H9 | [AGPL-3.0-only LICENSE](https://github.com/tiann/hapi/blob/main/LICENSE) | 分发对象码、对应源代码和网络交互版本的许可证义务。 |
+| H10 | [RPC Gateway](https://github.com/tiann/hapi/blob/main/hub/src/sync/rpcGateway.ts) / [CLI configuration](https://github.com/tiann/hapi/blob/main/cli/src/configuration.ts) | 120-300 秒 RPC 超时、CLI 默认 Hub 地址和 `HAPI_API_URL`。 |
 
 ## fnOS 应用平台
 
