@@ -21,10 +21,13 @@ describe('WorkspaceScope', () => {
         const root = await temp('hapi-scope-root-')
         const outside = await temp('hapi-scope-outside-')
         const file = join(root, 'file.txt')
+        const dotDotName = join(root, '..cache')
         await writeFile(file, 'ok')
+        await mkdir(dotDotName)
         const scope = await WorkspaceScope.create([root])
 
         await expect(scope.resolveReadable(file)).resolves.toBe(file)
+        await expect(scope.resolveReadable(dotDotName)).resolves.toBe(dotDotName)
         await expect(scope.resolveReadable(outside)).rejects.toThrow(/outside configured workspace roots/)
         await expect(scope.resolveMutableExisting(root)).rejects.toThrow(/roots cannot be modified/)
     })
@@ -51,5 +54,6 @@ describe('WorkspaceScope', () => {
         const scope = await WorkspaceScope.create([root])
 
         await expect(scope.resolveMutableExisting(join(root, '.git', 'config'))).rejects.toThrow(/Git metadata/)
+        await expect(scope.resolveWritableExisting(join(root, '.git', 'config'))).rejects.toThrow(/Git metadata/)
     })
 })

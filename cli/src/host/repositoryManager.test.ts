@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { RepositoryManager } from './repositoryManager'
 import { WorkspaceScope } from './workspaceScope'
 
@@ -46,6 +47,32 @@ describe('RepositoryManager', () => {
         await expect(manager.execute({ kind: 'set-remote', repository: root, remote: 'origin', url: 'https://example.com/repo.git?access_token=secret' }, context)).rejects.toThrow(/inline credentials/)
     })
 
+    it('preserves concurrent commit template updates for different repositories', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'hapi-git-preferences-'))
+        created.push(root)
+        const first = join(root, 'first')
+        const second = join(root, 'second')
+        const preferencePath = join(root, 'preferences.json')
+        await Promise.all([
+            exec('git', ['init', first]),
+            exec('git', ['init', second])
+        ])
+        const manager = new RepositoryManager(await WorkspaceScope.create([root]), { preferencePath })
+
+        await Promise.all([
+            manager.execute({ kind: 'set-commit-template', repository: first, template: 'custom' }, context),
+            manager.execute({ kind: 'set-commit-template', repository: second, template: 'custom' }, context)
+        ])
+
+        const preferences = JSON.parse(await readFile(preferencePath, 'utf8')) as {
+            repositories: Record<string, string>
+        }
+        expect(preferences.repositories).toMatchObject({
+            [first]: 'custom',
+            [second]: 'custom'
+        })
+    }, 20_000)
+
     it('unstages files before the repository has its first commit', async () => {
         const root = await mkdtemp(join(tmpdir(), 'hapi-git-unborn-'))
         created.push(root)
@@ -72,6 +99,47 @@ describe('RepositoryManager', () => {
         expect(result).toMatchObject({ repository: destination, tool: 'git' })
         expect((await manager.inspect(destination)).repositoryRoot).toBe(destination)
     }, 20_000)
+
+    it('rejects local Git sources and remotes outside workspace roots', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'hapi-git-scope-'))
+        const outside = await mkdtemp(join(tmpdir(), 'hapi-git-scope-outside-'))
+        created.push(root, outside)
+        const repository = join(root, 'repository')
+        const destination = join(root, 'clone')
+        const insideSource = join(root, 'inside.git')
+        const outsideSource = join(outside, 'source.git')
+        await Promise.all([
+            exec('git', ['init', repository]),
+            exec('git', ['init', '--bare', insideSource]),
+            exec('git', ['init', '--bare', outsideSource])
+        ])
+        const manager = new RepositoryManager(await WorkspaceScope.create([root]))
+
+        await manager.execute({
+            kind: 'set-remote',
+            repository,
+            remote: 'origin',
+            url: pathToFileURL(insideSource).href
+        }, context)
+        expect((await manager.inspect(repository)).remotes[0]).toMatchObject({ fetchUrl: insideSource })
+        await expect(manager.execute({
+            kind: 'clone',
+            source: relative(root, outsideSource),
+            destination
+        }, context)).rejects.toThrow(/outside configured workspace roots/)
+        await expect(manager.execute({
+            kind: 'clone',
+            source: pathToFileURL(outsideSource).href,
+            destination
+        }, context)).rejects.toThrow(/outside configured workspace roots/)
+        await expect(manager.execute({
+            kind: 'set-remote',
+            repository,
+            remote: 'origin',
+            url: relative(repository, outsideSource)
+        }, context)).rejects.toThrow(/outside configured workspace roots/)
+        await expect(stat(destination)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
 
     it.skipIf(process.platform === 'win32')('prefers an authenticated gh command for GitHub clones', async () => {
         const root = await mkdtemp(join(tmpdir(), 'hapi-gh-clone-'))

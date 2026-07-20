@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, relative } from 'node:path'
+import { isAbsolute, relative, sep } from 'node:path'
 import type { HostOperationSnapshot } from '@hapi/protocol'
 
 type OperationDomain = HostOperationSnapshot['domain']
@@ -16,7 +16,7 @@ function normalizedPath(path: string): string {
 
 function containsPath(parent: string, candidate: string): boolean {
     const rel = relative(normalizedPath(parent), normalizedPath(candidate))
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
 function lockKeysOverlap(left: string, right: string): boolean {

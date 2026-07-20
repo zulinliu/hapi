@@ -1,5 +1,5 @@
 import { lstat, realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export class WorkspaceScopeError extends Error {
     constructor(message: string) {
@@ -16,7 +16,7 @@ function isWithin(path: string, root: string): boolean {
     const normalizedPath = normalizeForComparison(path)
     const normalizedRoot = normalizeForComparison(root)
     const rel = relative(normalizedRoot, normalizedPath)
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
 async function canonicalizeMissingPath(path: string): Promise<string> {
@@ -76,6 +76,14 @@ export class WorkspaceScope {
         return canonical
     }
 
+    async resolveReadableNonGitMetadata(rawPath: string): Promise<string> {
+        const absolute = this.toAbsolute(rawPath)
+        this.assertNoGitMetadataSegment(absolute)
+        const canonical = await this.resolveReadable(absolute)
+        this.assertNoGitMetadataSegment(canonical)
+        return canonical
+    }
+
     async resolveMutableExisting(rawPath: string): Promise<string> {
         const absolute = this.toAbsolute(rawPath)
         this.assertNoGitMetadataSegment(absolute)
@@ -96,7 +104,7 @@ export class WorkspaceScope {
     }
 
     async resolveWritableExisting(rawPath: string): Promise<string> {
-        const canonical = await this.resolveReadable(rawPath)
+        const canonical = await this.resolveReadableNonGitMetadata(rawPath)
         this.assertMutable(canonical)
         return canonical
     }

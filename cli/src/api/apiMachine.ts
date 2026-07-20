@@ -43,7 +43,8 @@ import { collectMachineHealth } from '@/utils/machineHealth'
 import { inspectCursorChatStore } from '@/cursor/cursorChatStoreStatus'
 import { homedir } from 'node:os'
 import type { CursorChatStoreStatus } from '@hapi/protocol/apiTypes'
-import { registerHostManagementHandlers } from '@/host/registerHostManagementHandlers'
+import { registerWorkspaceHandlers } from '@/host/registerWorkspaceHandlers'
+import { registerProviderHandlers } from '@/host/registerProviderHandlers'
 
 type MachineRpcHandlers = {
     spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>
@@ -127,10 +128,11 @@ export class ApiMachineClient {
         })
 
         registerCommonHandlers(this.rpcHandlerManager, getInvokedCwd())
-        registerHostManagementHandlers({
+        registerWorkspaceHandlers({
             rpcHandlerManager: this.rpcHandlerManager,
             workspaceRoots: this.normalizedWorkspaceRoots
         })
+        registerProviderHandlers({ rpcHandlerManager: this.rpcHandlerManager })
 
         this.rpcHandlerManager.registerHandler<PathExistsRequest, PathExistsResponse>(RPC_METHODS.PathExists, async (params) => {
             const rawPaths = Array.isArray(params?.paths) ? params.paths : []

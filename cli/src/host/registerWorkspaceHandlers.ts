@@ -2,6 +2,7 @@ import {
     GitInspectRequestSchema,
     HostListDirectoryRequestSchema,
     HostFilePreviewRequestSchema,
+    HostFileUploadRequestSchema,
     HostFileWriteRequestSchema,
     HostDownloadChunkRequestSchema,
     HostDownloadPrepareRequestSchema,
@@ -10,6 +11,7 @@ import {
     type HostOperationGetResponse,
     type HostOperationStartResponse,
     type HostFilePreviewResponse,
+    type HostFileUploadResponse,
     type HostFileWriteResponse,
     type HostDownloadChunkResponse,
     type HostDownloadPrepareResponse
@@ -19,19 +21,16 @@ import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { FileManager } from './fileManager'
 import { DownloadManager } from './downloadManager'
 import { HostOperationManager } from './hostOperationManager'
-import type { ProviderRegistry } from './providerRegistry'
 import { RepositoryManager } from './repositoryManager'
 import { WorkspaceScope } from './workspaceScope'
-import { registerProviderHandlers } from './registerProviderHandlers'
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Operation failed'
 }
 
-export function registerHostManagementHandlers(options: {
+export function registerWorkspaceHandlers(options: {
     rpcHandlerManager: RpcHandlerManager
     workspaceRoots?: string[]
-    providerRegistry?: ProviderRegistry
 }): void {
     const { rpcHandlerManager } = options
     const operationManager = new HostOperationManager()
@@ -73,6 +72,17 @@ export function registerHostManagementHandlers(options: {
         try {
             const modules = await getWorkspaceModules()
             return await modules.files.writeText(parsed.data)
+        } catch (error) {
+            return { success: false, error: errorMessage(error) }
+        }
+    })
+
+    rpcHandlerManager.registerHandler<unknown, HostFileUploadResponse>(RPC_METHODS.HostFileUpload, async (raw) => {
+        const parsed = HostFileUploadRequestSchema.safeParse(raw)
+        if (!parsed.success) return { success: false, error: 'Invalid file upload request' }
+        try {
+            const modules = await getWorkspaceModules()
+            return await modules.files.upload(parsed.data)
         } catch (error) {
             return { success: false, error: errorMessage(error) }
         }
@@ -160,10 +170,5 @@ export function registerHostManagementHandlers(options: {
         if (!parsed.success) return { success: false, error: 'Invalid operation id' }
         const operation = operationManager.cancel(parsed.data.id)
         return operation ? { success: true, operation } : { success: false, error: 'Operation not found' }
-    })
-
-    registerProviderHandlers({
-        rpcHandlerManager,
-        providerRegistry: options.providerRegistry
     })
 }

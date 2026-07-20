@@ -4,7 +4,54 @@ export * from './messages'
 export * from './buildInfo'
 export * from './effort'
 export * from './flavors'
-export * from './hostManagement'
+export * from './workspaceManagement'
+export {
+    AgentProviderSchema,
+    ProviderProtocolSchema,
+    ProviderCredentialTypeSchema,
+    AGENT_PROVIDER_CAPABILITIES,
+    getProviderAgentCapability,
+    CodexWireApiSchema,
+    ProviderModelSourceSchema,
+    ProviderModelSchema,
+    ProviderHealthStatusSchema,
+    ProviderHealthSummarySchema,
+    parseProviderModelReference,
+    formatProviderModelReference,
+    ProviderProfileInputSchema,
+    ProviderProfileUpdateSchema,
+    ProviderProfileViewSchema,
+    ProviderListRequestSchema,
+    ProviderListResponseSchema,
+    ProviderCreateRequestSchema,
+    ProviderUpdateRequestSchema,
+    ProviderSetDefaultRequestSchema,
+    ProviderHealthCheckRequestSchema,
+    ProviderHealthCheckResponseSchema,
+    ProviderMutationResponseSchema
+} from './hostManagement'
+export type {
+    AgentProvider,
+    ProviderProtocol,
+    ProviderAgentCapability,
+    ProviderCredentialType,
+    CodexWireApi,
+    ProviderModelSource,
+    ProviderModel,
+    ProviderHealthStatus,
+    ProviderHealthSummary,
+    ProviderProfileInput,
+    ProviderProfileUpdate,
+    ProviderProfileView,
+    ProviderListRequest,
+    ProviderListResponse,
+    ProviderCreateRequest,
+    ProviderUpdateRequest,
+    ProviderSetDefaultRequest,
+    ProviderHealthCheckRequest,
+    ProviderHealthCheckResponse,
+    ProviderMutationResponse
+} from './hostManagement'
 export * from './models'
 export * from './modes'
 export * from './resume'

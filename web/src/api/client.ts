@@ -50,6 +50,8 @@ import type {
     GitInspectResponse,
     HostListDirectoryResponse,
     HostFilePreviewResponse,
+    HostFileUploadRequest,
+    HostFileUploadResponse,
     HostFileWriteRequest,
     HostFileWriteResponse,
     HostDownloadChunkResponse,
@@ -640,6 +642,13 @@ export class ApiClient {
 
     async writeHostFile(machineId: string, request: HostFileWriteRequest): Promise<HostFileWriteResponse> {
         return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/files/write`, {
+            method: 'POST',
+            body: JSON.stringify(request)
+        })
+    }
+
+    async uploadHostFile(machineId: string, request: HostFileUploadRequest): Promise<HostFileUploadResponse> {
+        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/host/files/upload`, {
             method: 'POST',
             body: JSON.stringify(request)
         })

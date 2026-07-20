@@ -41,7 +41,7 @@ describe('HostOperationManager', () => {
         expect(() => manager.start({
             domain: 'file',
             kind: 'create-file',
-            lockKeys: ['/workspace/project/new.txt'],
+            lockKeys: ['/workspace/project/..cache'],
             run: async () => {}
         })).toThrow(/already modifying/)
         manager.cancel(first.id)
