@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import type {
     GitCapabilities,
     GitBranch,
@@ -35,15 +36,29 @@ function redact(value: string): string {
         .replace(/([?&](?:access_token|private_token|api_?key|key|secret|password|passwd)=)[^&#\s]+/gi, '$1***')
 }
 
+function isGitHubShorthand(source: string): boolean {
+    const parts = source.replace(/\.git$/, '').split('/')
+    return parts.length === 2
+        && parts.every((part) => part !== '.' && part !== '..' && /^[\w.-]+$/.test(part))
+}
+
 function isGitHubSource(source: string): boolean {
-    return /^[\w.-]+\/[\w.-]+(?:\.git)?$/.test(source)
+    return isGitHubShorthand(source)
         || /(?:^|[.@/:])github\.com(?:[/:]|$)/i.test(source)
 }
 
 function gitFallbackSource(source: string): string {
-    return /^[\w.-]+\/[\w.-]+(?:\.git)?$/.test(source)
+    return isGitHubShorthand(source)
         ? `https://github.com/${source.replace(/\.git$/, '')}.git`
         : source
+}
+
+function isLocalGitSource(source: string): boolean {
+    if (/^file:/i.test(source) || isAbsolute(source) || /^\.\.?([\\/]|$)/.test(source)) return true
+    if (isGitHubSource(source)) return false
+    const colon = source.indexOf(':')
+    const separator = source.search(/[\\/]/)
+    return colon < 0 || (separator >= 0 && separator < colon)
 }
 
 function assertSafeRemoteUrl(url: string): void {
@@ -209,26 +224,29 @@ export class RepositoryManager {
 
     async lockKeys(operation: GitOperation): Promise<string[]> {
         if (operation.kind === 'clone') {
-            assertSafeRemoteUrl(operation.source)
-            return [await this.scope.resolveDestination(operation.destination)]
+            const destination = await this.scope.resolveDestination(operation.destination)
+            const parent = await this.scope.resolveReadable(dirname(destination))
+            await this.resolveGitSource(operation.source, parent)
+            return [destination]
         }
-        if (operation.kind === 'set-remote') assertSafeRemoteUrl(operation.url)
-        return [(await this.inspect(operation.repository)).repositoryRoot]
+        const repository = (await this.inspect(operation.repository)).repositoryRoot
+        if (operation.kind === 'set-remote') await this.resolveGitSource(operation.url, repository)
+        return [repository]
     }
 
     async execute(operation: GitOperation, context: HostOperationContext): Promise<Record<string, unknown>> {
         if (operation.kind === 'clone') {
-            assertSafeRemoteUrl(operation.source)
             const destination = await this.scope.resolveDestination(operation.destination)
             const parent = await this.scope.resolveReadable(dirname(destination))
+            const source = await this.resolveGitSource(operation.source, parent)
             const capabilities = await this.capabilities(true)
             if (!capabilities.gitAvailable) throw new Error('Git is not installed')
             context.report(0.1, 'Cloning repository')
-            if (isGitHubSource(operation.source) && capabilities.ghAvailable && capabilities.ghAuthenticated) {
-                await this.run('gh', ['repo', 'clone', operation.source, destination], parent, context.signal, 10 * 60_000)
+            if (!source.local && isGitHubSource(source.value) && capabilities.ghAvailable && capabilities.ghAuthenticated) {
+                await this.run('gh', ['repo', 'clone', source.value, destination], parent, context.signal, 10 * 60_000)
                 return { repository: destination, tool: 'gh' }
             }
-            await this.run('git', ['clone', '--', gitFallbackSource(operation.source), destination], parent, context.signal, 10 * 60_000)
+            await this.run('git', ['clone', '--', source.local ? source.value : gitFallbackSource(source.value), destination], parent, context.signal, 10 * 60_000)
             return { repository: destination, tool: 'git' }
         }
 
@@ -278,15 +296,15 @@ export class RepositoryManager {
                 )
                 break
             case 'set-remote': {
-                assertSafeRemoteUrl(operation.url)
+                const url = (await this.resolveGitSource(operation.url, repository)).value
                 context.report(0.2, 'Updating remote')
                 const remote = operation.remote ?? 'origin'
                 const exists = await this.commandAvailable('git', ['remote', 'get-url', remote], repository)
                 await this.run(
                     'git',
                     exists
-                        ? ['remote', 'set-url', remote, operation.url]
-                        : ['remote', 'add', remote, operation.url],
+                        ? ['remote', 'set-url', remote, url]
+                        : ['remote', 'add', remote, url],
                     repository,
                     context.signal
                 )
@@ -340,6 +358,17 @@ export class RepositoryManager {
             }
         }
         return { repository }
+    }
+
+    private async resolveGitSource(source: string, cwd: string): Promise<{ value: string; local: boolean }> {
+        assertSafeRemoteUrl(source)
+        if (!isLocalGitSource(source)) return { value: source, local: false }
+        const path = /^file:/i.test(source)
+            ? fileURLToPath(source)
+            : isAbsolute(source)
+                ? source
+                : resolve(cwd, source)
+        return { value: await this.scope.resolveReadable(path), local: true }
     }
 
     private async getCommitTemplate(repository: string): Promise<GitCommitTemplate> {
